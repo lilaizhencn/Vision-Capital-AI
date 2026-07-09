@@ -1,0 +1,126 @@
+:root {
+  font-family: "Manrope", sans-serif;
+  color: #d9e2f2;
+  background:
+    radial-gradient(circle at top left, rgba(44, 89, 166, 0.38), transparent 32%),
+    radial-gradient(circle at top right, rgba(15, 119, 117, 0.3), transparent 28%),
+    linear-gradient(135deg, #07111f 0%, #0f1e33 48%, #162740 100%);
+  --panel: rgba(10, 20, 36, 0.78);
+  --panel-border: rgba(138, 177, 242, 0.18);
+  --text-soft: #9aa8be;
+  --accent: #6db7ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: transparent;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  min-height: 100vh;
+  background: transparent;
+}
+
+.app-sider {
+  background: rgba(5, 11, 22, 0.92) !important;
+  border-right: 1px solid var(--panel-border);
+}
+
+.brand-block {
+  padding: 28px 24px 16px;
+  color: white;
+}
+
+.brand-block h3,
+.brand-block .ant-typography {
+  color: white !important;
+}
+
+.app-header {
+  height: auto;
+  padding: 28px 32px;
+  background: transparent;
+}
+
+.app-content {
+  padding: 0 32px 32px;
+}
+
+.glass-card,
+.ant-card.glass-card {
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 24px;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(16px);
+}
+
+.page-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.hero-strip {
+  padding: 28px;
+  border-radius: 28px;
+  background: linear-gradient(135deg, rgba(18, 41, 69, 0.9), rgba(20, 96, 104, 0.55));
+  border: 1px solid rgba(146, 192, 255, 0.18);
+}
+
+.auth-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 460px;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 28px;
+}
+
+.ant-layout,
+.ant-layout-content,
+.ant-card,
+.ant-statistic,
+.ant-typography,
+.ant-descriptions,
+.ant-list {
+  color: #d9e2f2;
+}
+
+.ant-card .ant-card-head,
+.ant-card .ant-card-body,
+.ant-list-item-meta-title,
+.ant-list-item-meta-description {
+  color: inherit !important;
+}
+
+.ant-menu-dark,
+.ant-menu-dark .ant-menu-sub,
+.ant-layout-sider-children {
+  background: transparent !important;
+}
+
+@media (max-width: 960px) {
+  .app-content,
+  .app-header {
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+}
+

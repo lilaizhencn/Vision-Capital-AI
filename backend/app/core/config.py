@@ -1,0 +1,63 @@
+from functools import lru_cache
+from pathlib import Path
+
+from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class Settings(BaseSettings):
+    app_name: str = "Vision Capital AI"
+    app_env: str = "local"
+    app_secret_key: str = "change-me"
+    database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/vision_capital_ai"
+    redis_url: str = "redis://localhost:6379/0"
+
+    jwt_secret_key: str = "change-me"
+    jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 1440
+
+    r2_endpoint_url: str | None = None
+    r2_access_key_id: str | None = None
+    r2_secret_access_key: str | None = None
+    r2_bucket_name: str | None = None
+    r2_public_base_url: str | None = None
+
+    llm_base_url: str = "https://api.openai.com/v1"
+    llm_api_key: str | None = None
+    llm_model: str = "gpt-4o-mini"
+    embedding_model: str = "text-embedding-3-small"
+
+    local_storage_path: Path = Path("./storage_data")
+    chunk_size: int = 1200
+    chunk_overlap: int = 200
+    embedding_dimension: int = 1536
+    celery_task_always_eager: bool = False
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    @property
+    def r2_enabled(self) -> bool:
+        return bool(
+            self.r2_endpoint_url
+            and self.r2_access_key_id
+            and self.r2_secret_access_key
+            and self.r2_bucket_name
+        )
+
+    @property
+    def local_storage_absolute_path(self) -> Path:
+        return self.local_storage_path.resolve()
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
+
+
+settings = get_settings()
+
