@@ -20,6 +20,7 @@ class FileRead(BaseModel):
     progress: int
     retry_count: int
     checksum_sha256: str | None
+    extracted_data: dict[str, object] | None
     multipart_upload_id: str | None
     created_at: datetime
 

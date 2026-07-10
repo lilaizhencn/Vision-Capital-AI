@@ -1,11 +1,11 @@
 import hashlib
 
 from app.ai.embedding_service import EmbeddingService
+from app.ai.llm_service import LLMService
 from app.core.database import SessionLocal
 from app.core.config import settings
 from app.models.chunk import DocumentChunk
-from app.models.file import ParseStatus
-from app.models.file import BatchStatus, ParseStage
+from app.models.file import BatchStatus, ParseDeadLetter, ParseStage, ParseStatus
 from app.repositories.chunk_repository import ChunkRepository
 from app.repositories.file_repository import FileRepository
 from app.rag.chunking import chunk_text, estimate_tokens
@@ -17,13 +17,14 @@ from openai import APIConnectionError, RateLimitError
 
 
 @celery_app.task(
+    bind=True,
     name="parse_uploaded_file_task",
     autoretry_for=(ConnectionError, TimeoutError, EndpointConnectionError, ReadTimeoutError, APIConnectionError, RateLimitError),
     retry_backoff=True,
     retry_backoff_max=120,
     retry_kwargs={"max_retries": settings.max_parse_retries},
 )
-def parse_uploaded_file_task(file_id: str) -> None:
+def parse_uploaded_file_task(self, file_id: str) -> None:
     db = SessionLocal()
     try:
         file_repo = FileRepository(db)
@@ -31,6 +32,7 @@ def parse_uploaded_file_task(file_id: str) -> None:
         storage = get_storage_service()
         parser = DocumentParserService()
         embedding_service = EmbeddingService()
+        llm_service = LLMService()
 
         file = file_repo.get(file_id)
         if not file:
@@ -58,6 +60,11 @@ def parse_uploaded_file_task(file_id: str) -> None:
 
         file.parse_stage = ParseStage.llm_extract
         file.progress = 75
+        db.commit()
+        try:
+            file.extracted_data = llm_service.extract_document_data(text)
+        except RuntimeError:
+            file.extracted_data = None
         db.commit()
         records: list[DocumentChunk] = []
         for index, chunk in enumerate(text_chunks):
@@ -94,6 +101,13 @@ def parse_uploaded_file_task(file_id: str) -> None:
             file.parse_error = str(exc)
             file.progress = 0
             file.retry_count = (file.retry_count or 0) + 1
+            if self.request.retries >= settings.max_parse_retries:
+                dead_letter = db.query(ParseDeadLetter).filter(ParseDeadLetter.file_id == file.id).one_or_none()
+                if dead_letter:
+                    dead_letter.attempts = file.retry_count
+                    dead_letter.error = str(exc)
+                else:
+                    db.add(ParseDeadLetter(file_id=file.id, attempts=file.retry_count, error=str(exc)))
             db.commit()
             _refresh_batch(db, file.batch_id)
         raise

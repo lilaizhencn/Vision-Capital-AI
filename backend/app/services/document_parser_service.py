@@ -48,7 +48,12 @@ class DocumentParserService:
 
     def _parse_docx(self, data: bytes) -> str:
         document = Document(BytesIO(data))
-        return "\n".join(paragraph.text for paragraph in document.paragraphs)
+        sections = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
+        for table_index, table in enumerate(document.tables, start=1):
+            sections.append(f"Table {table_index}:")
+            for row in table.rows:
+                sections.append(" | ".join(cell.text.strip() for cell in row.cells))
+        return "\n".join(sections)
 
     def _parse_excel(self, data: bytes) -> str:
         workbook = pd.read_excel(BytesIO(data), sheet_name=None)

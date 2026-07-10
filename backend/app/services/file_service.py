@@ -1,12 +1,13 @@
 import mimetypes
 import re
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models.file import BatchStatus, DocumentBatch, ParseStage, ParseStatus, ProjectFile
+from app.models.file import BatchStatus, DocumentBatch, ParseDeadLetter, ParseStage, ParseStatus, ProjectFile
 from app.models.user import User
 from app.repositories.file_repository import FileRepository
 from app.repositories.project_repository import ProjectRepository
@@ -140,6 +141,9 @@ class FileService:
         file.parse_stage = ParseStage.validate
         file.progress = 10
         file.parse_error = None
+        dead_letter = self.db.query(ParseDeadLetter).filter(ParseDeadLetter.file_id == file.id).one_or_none()
+        if dead_letter:
+            dead_letter.resolved_at = datetime.now(timezone.utc)
         self.db.commit()
         parse_uploaded_file_task.delay(file.id)
         return file

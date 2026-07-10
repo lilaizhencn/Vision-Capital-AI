@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 from types import SimpleNamespace
 from docx import Document
+from app.ai.llm_service import LLMService
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -37,6 +38,29 @@ def test_parser_extracts_docx_text() -> None:
     result = DocumentParserService().parse("memo.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", stream.getvalue())
 
     assert "Investment thesis" in result
+
+
+def test_parser_extracts_docx_tables() -> None:
+    document = Document()
+    table = document.add_table(rows=2, cols=2)
+    table.cell(0, 0).text = "Metric"
+    table.cell(0, 1).text = "Value"
+    table.cell(1, 0).text = "Revenue"
+    table.cell(1, 1).text = "100"
+    stream = BytesIO()
+    document.save(stream)
+
+    result = DocumentParserService().parse("table.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", stream.getvalue())
+
+    assert "Table 1:" in result
+    assert "Revenue | 100" in result
+
+
+def test_llm_extraction_parses_json(monkeypatch) -> None:
+    service = LLMService()
+    monkeypatch.setattr(service, "generate", lambda _prompt: "```json\n{\"risks\": [\"liquidity\"]}\n```")
+
+    assert service.extract_document_data("document") == {"risks": ["liquidity"]}
 
 
 def test_parser_extracts_excel_sheets() -> None:

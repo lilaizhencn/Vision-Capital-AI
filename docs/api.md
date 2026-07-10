@@ -29,6 +29,8 @@
 - `POST /api/file-batches/{batch_id}/complete`
 - `WS /api/ws/batches/{batch_id}?token=<JWT>`
 
+`FileRead.extracted_data` contains optional structured investment fields produced by the LLM stage. If no LLM key is configured, the field is `null` while deterministic parsing and chunking still complete.
+
 ## Chat
 
 - `POST /api/projects/{project_id}/chat`
