@@ -82,7 +82,7 @@ docker compose up --build
 启动后访问：
 
 - FastAPI Swagger: [http://localhost:8000/docs](http://localhost:8000/docs)
-- React Web: [http://localhost:5173](http://localhost:5173)
+- React Web: [http://localhost:8090](http://localhost:8090)
 
 ## 环境变量说明
 
