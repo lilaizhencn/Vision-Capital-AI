@@ -73,6 +73,10 @@ jobs:
           token=$(echo "$register" | jq -r .access_token)
           project=$(curl --fail --silent -X POST http://localhost:8000/api/projects -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"name":"CI Project","company_name":"CI Company","industry":"SaaS","stage":"Seed"}')
           project_id=$(echo "$project" | jq -r .id)
+          monitoring=$(curl --fail --silent -X POST "http://localhost:8000/api/projects/$project_id/monitoring" -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"metric_name":"Monthly revenue","metric_value":"320","metric_unit":"万元","risk_level":"watch","note":"CI monitoring smoke test"}')
+          test "$(echo "$monitoring" | jq -r .risk_level)" = "watch"
+          monitoring_list=$(curl --fail --silent "http://localhost:8000/api/projects/$project_id/monitoring" -H "Authorization: Bearer $token")
+          test "$(echo "$monitoring_list" | jq -r 'length')" -eq 1
           printf 'Revenue grew 20 percent\n' > /tmp/vision-ci.txt
           curl --fail --silent -X POST "http://localhost:8000/api/projects/$project_id/files/upload" -H "Authorization: Bearer $token" -F upload_file=@/tmp/vision-ci.txt
           for attempt in $(seq 1 60); do
