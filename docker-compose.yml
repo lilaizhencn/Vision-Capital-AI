@@ -40,7 +40,7 @@ services:
     volumes:
       - ./backend:/app
     env_file:
-      - ./backend/.env.example
+      - ${BACKEND_ENV_FILE:-./backend/.env.example}
     ports:
       - "8000:8000"
     depends_on:
@@ -63,7 +63,7 @@ services:
     volumes:
       - ./backend:/app
     env_file:
-      - ./backend/.env.example
+      - ${BACKEND_ENV_FILE:-./backend/.env.example}
     depends_on:
       backend:
         condition: service_healthy
@@ -81,7 +81,7 @@ services:
     environment:
       VITE_API_BASE_URL: /
     env_file:
-      - ./frontend/.env.example
+      - ${FRONTEND_ENV_FILE:-./frontend/.env.example}
     ports:
       - "5173:5173"
     depends_on:

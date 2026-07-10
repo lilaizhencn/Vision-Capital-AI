@@ -64,6 +64,20 @@ vision-capital-ai/
 docker compose up --build
 ```
 
+Compose 默认使用两个 `.env.example` 文件，便于首次启动。配置真实 R2、LLM 或生产密钥后，显式指定环境文件：
+
+```bash
+BACKEND_ENV_FILE=./backend/.env FRONTEND_ENV_FILE=./frontend/.env docker compose up --build
+```
+
+PowerShell：
+
+```powershell
+$env:BACKEND_ENV_FILE='./backend/.env'
+$env:FRONTEND_ENV_FILE='./frontend/.env'
+docker compose up --build
+```
+
 启动后访问：
 
 - FastAPI Swagger: [http://localhost:8000/docs](http://localhost:8000/docs)
