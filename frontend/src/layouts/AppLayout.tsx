@@ -90,6 +90,24 @@ export function AppLayout({ children }: PropsWithChildren) {
   const location = useLocation();
   const [assistantOpen, setAssistantOpen] = useState(false);
 
+  const searchProjects = async (value: string) => {
+    const query = value.trim().toLowerCase();
+    if (!query) return;
+    try {
+      const projects = await getProjects();
+      const match = (Array.isArray(projects) ? projects : []).find((project) => `${project.name} ${project.company_name}`.toLowerCase().includes(query));
+      if (match) navigate(`/projects/${match.id}`);
+      else message.info("没有找到匹配的项目");
+    } catch (error: any) {
+      message.error(error?.response?.data?.detail ?? "搜索项目失败");
+    }
+  };
+
+  const logout = () => {
+    localStorage.removeItem("vision_capital_ai_token");
+    navigate("/login");
+  };
+
   return (
     <Layout className="app-shell">
       <Sider width={232} className="app-sider" breakpoint="lg" collapsedWidth={0}>
@@ -114,8 +132,8 @@ export function AppLayout({ children }: PropsWithChildren) {
         <Header className="app-header">
           <div className="breadcrumb-line"><span>投研工作台</span><span className="breadcrumb-slash">/</span><strong>{location.pathname === "/" ? "今日概览" : menuItems.find((item) => item.key === `/${location.pathname.split("/")[1]}`)?.label ?? "项目空间"}</strong></div>
           <div className="header-actions">
-            <Input className="global-search" prefix={<SearchOutlined />} placeholder="搜索项目、公司、报告" />
-            <Button type="text" icon={<UserOutlined />} className="user-button">李正宇</Button>
+            <Input.Search className="global-search" prefix={<SearchOutlined />} placeholder="搜索项目、公司、报告" enterButton={false} onSearch={(value) => void searchProjects(value)} />
+            <Button type="text" icon={<UserOutlined />} className="user-button" onClick={logout}>退出登录</Button>
           </div>
         </Header>
         <Content className="app-content">{children}</Content>
