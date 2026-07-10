@@ -1,4 +1,5 @@
 from io import BytesIO
+import hashlib
 
 import pandas as pd
 import pytest
@@ -206,7 +207,7 @@ def test_batch_upload_complete_and_parse_flow(api_client) -> None:
     headers = {"Authorization": f"Bearer {token}"}
     project_id = api_client.post("/api/projects", headers=headers, json={"name": "Batch QA", "company_name": "Acme", "industry": "SaaS", "stage": "Seed"}).json()["id"]
 
-    created = api_client.post(f"/api/projects/{project_id}/file-batches", headers=headers, json={"files": [{"filename": "batch.txt", "size": 5, "content_type": "text/plain"}]})
+    created = api_client.post(f"/api/projects/{project_id}/file-batches", headers=headers, json={"files": [{"filename": "batch.txt", "size": 5, "content_type": "text/plain", "checksum_sha256": hashlib.sha256(b"hello").hexdigest()}]})
     assert created.status_code == 200
     batch = created.json()
     file_id = batch["files"][0]["id"]
@@ -224,9 +225,28 @@ def test_batch_upload_complete_and_parse_flow(api_client) -> None:
     files = api_client.get(f"/api/projects/{project_id}/files", headers=headers).json()
     assert files[0]["parse_status"] == "completed"
     assert files[0]["batch_id"] == batch["id"]
+    assert files[0]["checksum_sha256"] == hashlib.sha256(b"hello").hexdigest()
     repeated = api_client.post(f"/api/file-batches/{batch['id']}/complete", headers=headers)
     assert repeated.status_code == 200
     assert repeated.json()["status"] == "completed"
+
+
+def test_batch_checksum_mismatch_fails_parse(api_client) -> None:
+    token = api_client.post("/api/auth/register", json={"email": "checksum@example.com", "username": "checksum", "password": "strong-password"}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    project_id = api_client.post(f"/api/projects", headers=headers, json={"name": "Checksum QA", "company_name": "Acme", "industry": "SaaS", "stage": "Seed"}).json()["id"]
+    created = api_client.post(
+        f"/api/projects/{project_id}/file-batches",
+        headers=headers,
+        json={"files": [{"filename": "checksum.txt", "size": 5, "content_type": "text/plain", "checksum_sha256": "0" * 64}]},
+    ).json()
+    file_id = created["files"][0]["id"]
+    api_client.post(f"/api/file-batches/{created['id']}/files/{file_id}/content", headers=headers, files={"upload_file": ("checksum.txt", b"hello", "text/plain")})
+    with pytest.raises(ValueError, match="checksum"):
+        api_client.post(f"/api/file-batches/{created['id']}/complete", headers=headers)
+    file_item = api_client.get(f"/api/projects/{project_id}/files", headers=headers).json()[0]
+    assert file_item["parse_status"] == "failed"
+    assert "checksum" in file_item["parse_error"].lower()
 
 
 def test_project_dashboard_chat_and_report_flow(api_client, monkeypatch) -> None:

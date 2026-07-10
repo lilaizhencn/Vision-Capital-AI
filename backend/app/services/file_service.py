@@ -74,7 +74,7 @@ class FileService:
                 project_id=project_id, batch_id=batch.id, filename=item.filename,
                 content_type=item.content_type, size=item.size, r2_bucket=getattr(self.storage, "bucket", None),
                 r2_object_key=key, parse_status=ParseStatus.pending, parse_stage=ParseStage.upload, progress=0,
-                multipart_upload_id=plan.upload_id,
+                multipart_upload_id=plan.upload_id, expected_checksum_sha256=item.checksum_sha256,
             )
             self.db.add(file)
             self.db.flush()

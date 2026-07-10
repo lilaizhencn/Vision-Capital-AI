@@ -40,6 +40,7 @@ export interface ProjectFile {
   progress: number;
   retry_count: number;
   checksum_sha256?: string | null;
+  expected_checksum_sha256?: string | null;
   extracted_data?: Record<string, unknown> | null;
   multipart_upload_id?: string | null;
   created_at: string;

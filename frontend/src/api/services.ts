@@ -56,8 +56,13 @@ export async function uploadProjectFile(projectId: string, file: File) {
 }
 
 export async function createFileBatch(projectId: string, files: File[]) {
+  const checksums = await Promise.all(files.map(async (file) => {
+    if (!globalThis.crypto?.subtle) return null;
+    const digest = await globalThis.crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+  }));
   const { data } = await client.post<FileBatch>(`/api/projects/${projectId}/file-batches`, {
-    files: files.map((file) => ({ filename: file.name, size: file.size, content_type: file.type || "application/octet-stream" })),
+    files: files.map((file, index) => ({ filename: file.name, size: file.size, content_type: file.type || "application/octet-stream", checksum_sha256: checksums[index] })),
   });
   return data;
 }

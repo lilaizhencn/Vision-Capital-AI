@@ -49,6 +49,8 @@ def parse_uploaded_file_task(self, file_id: str) -> None:
         # 这里串起上传后最关键的数据管道：下载、解析、切片、向量化、入库。
         data = storage.download_file(file.r2_object_key)
         file.checksum_sha256 = hashlib.sha256(data).hexdigest()
+        if file.expected_checksum_sha256 and file.checksum_sha256.lower() != file.expected_checksum_sha256.lower():
+            raise ValueError("Uploaded object checksum does not match the client-declared SHA-256")
         file.parse_stage = ParseStage.ocr
         file.progress = 35
         db.commit()

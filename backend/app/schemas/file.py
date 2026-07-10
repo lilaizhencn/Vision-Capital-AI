@@ -20,6 +20,7 @@ class FileRead(BaseModel):
     progress: int
     retry_count: int
     checksum_sha256: str | None
+    expected_checksum_sha256: str | None
     extracted_data: dict[str, object] | None
     multipart_upload_id: str | None
     created_at: datetime
@@ -36,6 +37,7 @@ class BatchFileRequest(BaseModel):
     filename: str = Field(min_length=1, max_length=255)
     size: int = Field(ge=0)
     content_type: str = Field(default="application/octet-stream", max_length=150)
+    checksum_sha256: str | None = Field(default=None, min_length=64, max_length=64, pattern=r"^[0-9a-fA-F]{64}$")
 
 
 class BatchCreateRequest(BaseModel):

@@ -68,6 +68,7 @@ class ProjectFile(Base):
     progress: Mapped[int] = mapped_column(Integer, default=0)
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
     checksum_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    expected_checksum_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     extracted_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     multipart_upload_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
