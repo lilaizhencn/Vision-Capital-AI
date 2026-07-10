@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.models.file import BatchStatus, ParseStage, ParseStatus
 
@@ -60,7 +60,7 @@ class BatchRead(BaseModel):
     progress: int
     status: BatchStatus
     files: list[FileRead]
-    upload_sessions: list[UploadSession] = []
+    upload_sessions: list[UploadSession] = Field(default_factory=list)
 
 
 class MultipartPart(BaseModel):

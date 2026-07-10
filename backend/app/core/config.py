@@ -9,8 +9,11 @@ class Settings(BaseSettings):
     app_name: str = "Vision Capital AI"
     app_env: str = "local"
     app_secret_key: str = "change-me"
+    cors_allowed_origins: str = "http://localhost:5173,http://localhost:5174"
+    auto_create_tables: bool = False
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/vision_capital_ai"
     redis_url: str = "redis://localhost:6379/0"
+    database_connect_timeout_seconds: int = 1
 
     jwt_secret_key: str = "change-me"
     jwt_algorithm: str = "HS256"
@@ -31,6 +34,8 @@ class Settings(BaseSettings):
     llm_api_key: str | None = None
     llm_model: str = "gpt-4o-mini"
     embedding_model: str = "text-embedding-3-small"
+    ocr_model: str = "gpt-4o-mini"
+    ocr_max_pages: int = 20
 
     local_storage_path: Path = Path("./storage_data")
     chunk_size: int = 1200
@@ -53,6 +58,14 @@ class Settings(BaseSettings):
             and self.r2_secret_access_key
             and self.r2_bucket_name
         )
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [item.strip() for item in self.cors_allowed_origins.split(",") if item.strip()]
+
+    def validate_production(self) -> None:
+        if self.app_env.lower() == "production" and self.app_secret_key == "change-me":
+            raise RuntimeError("APP_SECRET_KEY must be changed in production")
 
     @property
     def local_storage_absolute_path(self) -> Path:

@@ -3,7 +3,7 @@ import type { UploadFile, UploadProps } from "antd";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
-import { askProject, completeFileBatch, completeMultipart, createFileBatch, generateReport, getMultipartPartUrl, getProject, getProjectFiles, getReports, retryFile, uploadBatchFileContent } from "../api/services";
+import { askProject, completeFileBatch, completeMultipart, createFileBatch, generateReport, getMultipartPartUrl, getProject, getProjectFiles, getReports, getUploadedParts, retryFile, uploadBatchFileContent } from "../api/services";
 import type { ChatResponse, Project, ProjectFile, Report } from "../types";
 
 export function ProjectDetailPage() {
@@ -61,14 +61,24 @@ export function ProjectDetailPage() {
           const response = await fetch(session.upload_url, { method: "PUT", body: localFile, headers: { "Content-Type": localFile.type || "application/octet-stream" } });
           if (!response.ok) throw new Error(`直传失败: ${localFile.name}`);
         } else if (session.upload_mode === "multipart" && session.part_size) {
-          const parts: Array<{ part_number: number; etag: string }> = [];
+          const resumeKey = `vision-capital-ai:batch:${batch.id}:file:${session.file_id}:parts`;
+          const storedParts = JSON.parse(localStorage.getItem(resumeKey) ?? "{}") as Record<string, string>;
+          const serverParts = await getUploadedParts(batch.id, session.file_id);
+          for (const part of serverParts) storedParts[String(part.part_number)] = part.etag;
+          const parts: Array<{ part_number: number; etag: string }> = Object.entries(storedParts).map(([partNumber, etag]) => ({ part_number: Number(partNumber), etag }));
           for (let offset = 0, partNumber = 1; offset < localFile.size; offset += session.part_size, partNumber += 1) {
+            if (storedParts[String(partNumber)]) continue;
             const url = await getMultipartPartUrl(batch.id, session.file_id, partNumber);
             const response = await fetch(url, { method: "PUT", body: localFile.slice(offset, offset + session.part_size) });
             if (!response.ok) throw new Error(`分片上传失败: ${localFile.name}`);
-            parts.push({ part_number: partNumber, etag: response.headers.get("ETag")?.replace(/"/g, "") ?? "" });
+            const etag = response.headers.get("ETag")?.replace(/"/g, "") ?? "";
+            if (!etag) throw new Error("R2 未返回 ETag，请检查对象存储 CORS 的 expose_headers 配置");
+            storedParts[String(partNumber)] = etag;
+            parts.push({ part_number: partNumber, etag });
+            localStorage.setItem(resumeKey, JSON.stringify(storedParts));
           }
-          await completeMultipart(batch.id, session.file_id, parts);
+          await completeMultipart(batch.id, session.file_id, Object.entries(storedParts).map(([partNumber, etag]) => ({ part_number: Number(partNumber), etag })));
+          localStorage.removeItem(resumeKey);
         } else {
           await uploadBatchFileContent(batch.id, session.file_id, localFile);
         }

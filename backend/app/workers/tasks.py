@@ -9,11 +9,13 @@ from app.rag.chunking import chunk_text, estimate_tokens
 from app.services.document_parser_service import DocumentParserService
 from app.storage.storage_service import get_storage_service
 from app.workers.celery_app import celery_app
+from botocore.exceptions import EndpointConnectionError, ReadTimeoutError
+from openai import APIConnectionError, RateLimitError
 
 
 @celery_app.task(
     name="parse_uploaded_file_task",
-    autoretry_for=(ConnectionError, TimeoutError),
+    autoretry_for=(ConnectionError, TimeoutError, EndpointConnectionError, ReadTimeoutError, APIConnectionError, RateLimitError),
     retry_backoff=True,
     retry_backoff_max=120,
     retry_kwargs={"max_retries": 3},

@@ -20,6 +20,14 @@
 - `GET /api/projects/{project_id}/files`
 - `GET /api/files/{file_id}`
 - `DELETE /api/files/{file_id}`
+- `POST /api/files/{file_id}/retry`
+- `POST /api/projects/{project_id}/file-batches`
+- `POST /api/file-batches/{batch_id}/files/{file_id}/content`
+- `GET /api/file-batches/{batch_id}/files/{file_id}/parts/{part_number}/url`
+- `GET /api/file-batches/{batch_id}/files/{file_id}/parts`
+- `POST /api/file-batches/{batch_id}/files/{file_id}/complete-multipart`
+- `POST /api/file-batches/{batch_id}/complete`
+- `WS /api/ws/batches/{batch_id}?token=<JWT>`
 
 ## Chat
 
@@ -33,4 +41,3 @@
 ## Dashboard
 
 - `GET /api/dashboard/summary`
-

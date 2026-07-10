@@ -124,6 +124,16 @@ class R2StorageService:
             MultipartUpload={"Parts": parts},
         )
 
+    def list_multipart_parts(self, object_key: str, upload_id: str) -> list[dict]:
+        parts: list[dict] = []
+        marker = 0
+        while True:
+            response = self.client.list_parts(Bucket=self.bucket, Key=object_key, UploadId=upload_id, PartNumberMarker=marker)
+            parts.extend({"part_number": item["PartNumber"], "etag": item["ETag"].strip('"')} for item in response.get("Parts", []))
+            if not response.get("IsTruncated"):
+                return parts
+            marker = response["NextPartNumberMarker"]
+
 
 def get_storage_service() -> R2StorageService | LocalStorageService:
     # R2 未配置时回退到本地存储，方便本地学习和联调。

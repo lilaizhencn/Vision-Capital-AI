@@ -138,8 +138,7 @@ celery -A app.workers.celery_app.celery_app worker --loglevel=info
 
 ## 后续规划
 
-- 增加 OCR 能力
+- 增加 OCR 结果校对与人工审核流程
 - 增加系统级报告中心与全文检索
 - 增加投后提醒、舆情追踪、自动尽调 Agent
 - 增加权限分级、组织空间、多用户协作
-

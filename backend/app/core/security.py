@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta, timezone
+import hashlib
 
+import bcrypt
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 
@@ -9,11 +11,22 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
+    digest = hashlib.sha256(plain_password.encode("utf-8")).digest()
+    try:
+        if bcrypt.checkpw(digest, hashed_password.encode("utf-8")):
+            return True
+    except ValueError:
+        pass
+    # Keep compatibility with accounts created by the previous Passlib format.
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except (ValueError, RuntimeError):
+        return False
 
 
 def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
+    digest = hashlib.sha256(password.encode("utf-8")).digest()
+    return bcrypt.hashpw(digest, bcrypt.gensalt()).decode("utf-8")
 
 
 def create_access_token(subject: str) -> str:
@@ -27,4 +40,3 @@ def decode_token(token: str) -> dict:
         return jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
     except JWTError as exc:
         raise ValueError("Invalid token") from exc
-

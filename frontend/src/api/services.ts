@@ -79,6 +79,11 @@ export async function getMultipartPartUrl(batchId: string, fileId: string, partN
   return data.url;
 }
 
+export async function getUploadedParts(batchId: string, fileId: string) {
+  const { data } = await client.get<{ parts: Array<{ part_number: number; etag: string }> }>(`/api/file-batches/${batchId}/files/${fileId}/parts`);
+  return data.parts;
+}
+
 export async function completeMultipart(batchId: string, fileId: string, parts: Array<{ part_number: number; etag: string }>) {
   await client.post(`/api/file-batches/${batchId}/files/${fileId}/complete-multipart`, { parts });
 }

@@ -5,14 +5,14 @@
 ```mermaid
 flowchart TD
     User["用户浏览器"] --> Web["React Web"]
-    Web --> API["FastAPI Backend"]
+    Web --> API["FastAPI Backend + WebSocket"]
     API --> DB["PostgreSQL + pgvector"]
     API --> Redis["Redis"]
-    API --> R2["Cloudflare R2 / Local Storage Fallback"]
+    Web -. "Presigned PUT / Multipart" .-> R2["Cloudflare R2 / Local Storage Fallback"]
     Redis --> Worker["Celery Worker"]
     Worker --> R2
     Worker --> DB
-    Worker --> Parser["Document Parser"]
+    Worker --> Parser["Document Parser + Vision OCR"]
     Worker --> Embedding["OpenAI Compatible Embedding API"]
     API --> LLM["OpenAI / DeepSeek Compatible LLM"]
     API --> RAG["RAG Pipeline"]
@@ -56,4 +56,3 @@ flowchart LR
 - `backend/app/storage`: R2 与本地回退存储封装。
 - `backend/app/workers`: Celery 任务与 worker 入口。
 - `backend/app/rag` 与 `backend/app/ai`: 文本切片、Embedding、LLM 与检索增强问答能力。
-

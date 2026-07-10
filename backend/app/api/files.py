@@ -51,6 +51,18 @@ def sign_multipart_part(batch_id: str, file_id: str, part_number: int, db: Sessi
     return {"url": FileService(db).storage.presign_upload_part(file.r2_object_key, file.multipart_upload_id, part_number)}
 
 
+@router.get("/api/file-batches/{batch_id}/files/{file_id}/parts")
+def list_multipart_parts(batch_id: str, file_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    file = FileRepository(db).get(file_id)
+    batch = db.get(DocumentBatch, batch_id)
+    storage = FileService(db).storage
+    if not batch or not file or file.batch_id != batch_id or not ProjectRepository(db).get_for_owner(batch.project_id, user.id):
+        raise HTTPException(status_code=404, detail="Batch file not found")
+    if not file.multipart_upload_id or not hasattr(storage, "list_multipart_parts"):
+        return {"parts": []}
+    return {"parts": storage.list_multipart_parts(file.r2_object_key, file.multipart_upload_id)}
+
+
 @router.post("/api/file-batches/{batch_id}/files/{file_id}/complete-multipart")
 def complete_multipart(batch_id: str, file_id: str, payload: MultipartCompleteRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     file = FileRepository(db).get(file_id)

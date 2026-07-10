@@ -86,6 +86,8 @@ class FileService:
         if not batch or not self.project_repo.get_for_owner(batch.project_id, user.id):
             raise HTTPException(status_code=404, detail="Batch not found")
         files = list(self.db.query(ProjectFile).filter(ProjectFile.batch_id == batch.id).all())
+        batch.status = BatchStatus.queued
+        self.db.commit()
         for file in files:
             if not self.storage.object_exists(file.r2_object_key, file.size):
                 file.parse_status = ParseStatus.failed
@@ -97,7 +99,6 @@ class FileService:
                 file.parse_stage = ParseStage.validate
                 file.progress = 10
                 parse_uploaded_file_task.delay(file.id)
-        batch.status = BatchStatus.queued
         self.db.commit()
         return BatchRead.model_validate({"id": batch.id, "project_id": batch.project_id,
             "total_files": batch.total_files, "completed_files": batch.completed_files,
