@@ -3,6 +3,7 @@
 from alembic import op
 import sqlalchemy as sa
 from pgvector.sqlalchemy import Vector
+from sqlalchemy.dialects import postgresql
 
 revision = "20260710_0001"
 down_revision = None
@@ -24,10 +25,10 @@ def upgrade() -> None:
     op.create_index("ix_users_email", "users", ["email"])
     op.create_index("ix_users_username", "users", ["username"])
 
-    investment_status = sa.Enum(
+    investment_status = postgresql.ENUM(
         "pre_investment", "in_progress", "post_investment", "rejected", "exited", name="investment_status", create_type=False
     )
-    parse_status = sa.Enum("pending", "processing", "completed", "failed", name="parse_status", create_type=False)
+    parse_status = postgresql.ENUM("pending", "processing", "completed", "failed", name="parse_status", create_type=False)
     investment_status.create(op.get_bind(), checkfirst=True)
     parse_status.create(op.get_bind(), checkfirst=True)
 
