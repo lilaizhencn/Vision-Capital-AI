@@ -156,7 +156,9 @@ def persist_document_task(self, file_id: str):
             embedding = None
             try:
                 embedding = EmbeddingService().embed_text(chunk)
-            except RuntimeError:
+            except Exception:
+                # Embedding providers are optional for ingestion. The RAG layer
+                # falls back to recent project chunks when vectorization is unavailable.
                 pass
             records.append(DocumentChunk(project_id=file.project_id, file_id=file.id, chunk_index=index, content=chunk, embedding=embedding, token_count=estimate_tokens(chunk)))
         ChunkRepository(db).replace_for_file(file.id, records)

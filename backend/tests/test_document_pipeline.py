@@ -397,6 +397,24 @@ def test_chat_falls_back_to_recent_chunks_when_embeddings_are_unavailable(api_cl
     assert response.json()["citations"][0]["filename"] == "notes.txt"
 
 
+def test_persist_stage_tolerates_embedding_provider_errors(api_client, monkeypatch) -> None:
+    monkeypatch.setattr(EmbeddingService, "embed_text", lambda _self, _text: (_ for _ in ()).throw(ValueError("embedding endpoint returned 404")))
+    token = api_client.post("/api/auth/register", json={"email": "embedding-qa@example.com", "username": "embeddingqa", "password": "strong-password"}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    project_id = api_client.post("/api/projects", headers=headers, json={"name": "Embedding QA", "company_name": "Acme", "industry": "SaaS", "stage": "Seed"}).json()["id"]
+
+    uploaded = api_client.post(
+        f"/api/projects/{project_id}/files/upload",
+        headers=headers,
+        files={"upload_file": ("notes.txt", b"Revenue grew 20 percent", "text/plain")},
+    )
+
+    assert uploaded.status_code == 200
+    file_item = api_client.get(f"/api/projects/{project_id}/files", headers=headers).json()[0]
+    assert file_item["parse_status"] == "completed"
+    assert file_item["progress"] == 100
+
+
 def test_llm_service_uses_openai_compatible_chat_completions(monkeypatch) -> None:
     service = LLMService()
     calls = {}
