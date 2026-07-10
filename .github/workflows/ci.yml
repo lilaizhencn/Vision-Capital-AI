@@ -80,7 +80,7 @@ jobs:
             status=$(echo "$files" | jq -r '.[0].parse_status // "missing"')
             if [ "$status" = "completed" ]; then
               echo "$files" | jq -e '.[0].virus_scan_status == "clean" or .[0].virus_scan_status == "skipped"' >/dev/null
-              exit 0
+              break
             fi
             if [ "$status" = "failed" ]; then
               echo "$files"
@@ -88,7 +88,32 @@ jobs:
             fi
             sleep 5
           done
-          echo "$files"
+          test "$status" = "completed"
+
+          checksum=$(sha256sum /tmp/vision-ci.txt | awk '{print $1}')
+          batch=$(curl --fail --silent -X POST "http://localhost:8000/api/projects/$project_id/file-batches" \
+            -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
+            -d "{\"files\":[{\"filename\":\"batch-ci.txt\",\"size\":24,\"content_type\":\"text/plain\",\"checksum_sha256\":\"$checksum\"}]}" )
+          batch_id=$(echo "$batch" | jq -r .id)
+          batch_file_id=$(echo "$batch" | jq -r '.files[0].id')
+          resumed=$(curl --fail --silent "http://localhost:8000/api/file-batches/$batch_id" -H "Authorization: Bearer $token")
+          test "$(echo "$resumed" | jq -r '.upload_sessions[0].file_id')" = "$batch_file_id"
+          curl --fail --silent -X POST "http://localhost:8000/api/file-batches/$batch_id/files/$batch_file_id/content" \
+            -H "Authorization: Bearer $token" -F upload_file=@/tmp/vision-ci.txt
+          curl --fail --silent -X POST "http://localhost:8000/api/file-batches/$batch_id/complete" -H "Authorization: Bearer $token" >/dev/null
+          for attempt in $(seq 1 60); do
+            batch_state=$(curl --fail --silent "http://localhost:8000/api/file-batches/$batch_id" -H "Authorization: Bearer $token")
+            batch_status=$(echo "$batch_state" | jq -r '.status')
+            if [ "$batch_status" = "completed" ]; then
+              exit 0
+            fi
+            if [ "$batch_status" = "failed" ]; then
+              echo "$batch_state"
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "$batch_state"
           exit 1
       - name: Collect service logs
         if: always()
