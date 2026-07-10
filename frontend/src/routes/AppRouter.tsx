@@ -9,6 +9,7 @@ import { ProjectDetailPage } from "../pages/ProjectDetailPage";
 import { ProjectsPage } from "../pages/ProjectsPage";
 import { RegisterPage } from "../pages/RegisterPage";
 import { ReportsPage } from "../pages/ReportsPage";
+import { RiskMonitoringPage } from "../pages/RiskMonitoringPage";
 import { SettingsPage } from "../pages/SettingsPage";
 
 function ProtectedRoute({ children }: { children: ReactElement }) {
@@ -30,12 +31,13 @@ export function AppRouter() {
           <ProtectedRoute>
             <AppLayout>
               <Routes>
-                <Route path="/" element={<DashboardPage />} />
-                <Route path="/projects" element={<ProjectsPage />} />
-                <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
-                <Route path="/assistant" element={<AssistantPage />} />
-                <Route path="/reports" element={<ReportsPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
+                <Route index element={<DashboardPage />} />
+                <Route path="projects" element={<ProjectsPage />} />
+                <Route path="projects/:projectId" element={<ProjectDetailPage />} />
+                <Route path="assistant" element={<AssistantPage />} />
+                <Route path="reports" element={<ReportsPage />} />
+                <Route path="risk" element={<RiskMonitoringPage />} />
+                <Route path="settings" element={<SettingsPage />} />
               </Routes>
             </AppLayout>
           </ProtectedRoute>
@@ -44,3 +46,5 @@ export function AppRouter() {
     </Routes>
   );
 }
+
+

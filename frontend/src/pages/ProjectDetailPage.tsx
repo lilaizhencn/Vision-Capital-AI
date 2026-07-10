@@ -1,4 +1,5 @@
-import { Button, Card, Col, Input, List, Progress, Row, Tabs, Typography, Upload, message } from "antd";
+import { ArrowRightOutlined, CheckCircleOutlined, FileTextOutlined, RobotOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
+import { Alert, Button, Card, Col, Descriptions, Input, List, Progress, Row, Space, Tabs, Tag, Typography, Upload, message } from "antd";
 import type { UploadFile, UploadProps } from "antd";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
@@ -23,6 +24,11 @@ export function ProjectDetailPage() {
   const [chatting, setChatting] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [retryingFileId, setRetryingFileId] = useState<string | null>(null);
+  const [tasks, setTasks] = useState([
+    { id: "team", label: "Ã¨Â¡Â¥Ã¥â€¦â€¦Ã¦Â Â¸Ã¥Â¿Æ’Ã¥â€ºÂ¢Ã©ËœÅ¸Ã¥Â±Â¥Ã¥Å½â€ Ã¤Â¸Å½Ã¥Ë†â€ Ã¥Â·Â¥", done: false },
+    { id: "market", label: "Ã§Â¡Â®Ã¨Â®Â¤Ã¥Â¸â€šÃ¥Å“ÂºÃ¨Â§â€žÃ¦Â¨Â¡Ã¤Â¸Å½Ã§Â«Å¾Ã¤Âºâ€°Ã¦Â Â¼Ã¥Â±â‚¬Ã¥Ââ€¡Ã¨Â®Â¾", done: false },
+    { id: "finance", label: "Ã¥Â¤ÂÃ¦Â Â¸Ã¦Å“â‚¬Ã¦â€“Â°Ã¤Â¸â‚¬Ã§â€°Ë†Ã¨Â´Â¢Ã¥Å Â¡Ã©Â¢â€žÃ¦Âµâ€¹", done: true },
+  ]);
 
   const load = async () => {
     try {
@@ -32,10 +38,10 @@ export function ProjectDetailPage() {
         getReports(projectId),
       ]);
       setProject(nextProject);
-      setFiles(nextFiles);
-      setReports(nextReports);
+      setFiles(Array.isArray(nextFiles) ? nextFiles : []);
+      setReports(Array.isArray(nextReports) ? nextReports : []);
     } catch (error: any) {
-      message.error(error?.response?.data?.detail ?? "无法加载项目详情");
+      message.error(error?.response?.data?.detail ?? "Ã¦â€”Â Ã¦Â³â€¢Ã¥Å Â Ã¨Â½Â½Ã©Â¡Â¹Ã§â€ºÂ®Ã¨Â¯Â¦Ã¦Æ’â€¦");
     } finally {
       setLoading(false);
     }
@@ -57,10 +63,10 @@ export function ProjectDetailPage() {
         setBatchProgress(payload.progress);
         if (payload.status === "completed" || payload.status === "failed") void load();
       } catch {
-        message.warning("实时进度消息格式无效，页面将继续刷新状态");
+        message.warning("Ã¥Â®Å¾Ã¦â€”Â¶Ã¨Â¿â€ºÃ¥ÂºÂ¦Ã¦Â¶Ë†Ã¦ÂÂ¯Ã¦Â Â¼Ã¥Â¼ÂÃ¦â€”Â Ã¦â€¢Ë†Ã¯Â¼Å’Ã©Â¡ÂµÃ©ÂÂ¢Ã¥Â°â€ Ã§Â»Â§Ã§Â»Â­Ã¥Ë†Â·Ã¦â€“Â°Ã§Å Â¶Ã¦â‚¬Â");
       }
     };
-    socket.onerror = () => message.warning("实时进度连接中断，页面仍会刷新获取状态");
+    socket.onerror = () => message.warning("Ã¥Â®Å¾Ã¦â€”Â¶Ã¨Â¿â€ºÃ¥ÂºÂ¦Ã¨Â¿Å¾Ã¦Å½Â¥Ã¤Â¸Â­Ã¦â€“Â­Ã¯Â¼Å’Ã©Â¡ÂµÃ©ÂÂ¢Ã¤Â»ÂÃ¤Â¼Å¡Ã¥Ë†Â·Ã¦â€“Â°Ã¨Å½Â·Ã¥Ââ€“Ã§Å Â¶Ã¦â‚¬Â");
     return () => socket.close();
   }, [batchId]);
 
@@ -90,7 +96,7 @@ export function ProjectDetailPage() {
         if (candidate.status === "uploading") {
           setBatchId(candidate.id);
           setResumableBatch(candidate);
-          message.info("已恢复未完成的上传批次");
+          message.info("Ã¥Â·Â²Ã¦ÂÂ¢Ã¥Â¤ÂÃ¦Å“ÂªÃ¥Â®Å’Ã¦Ë†ÂÃ§Å¡â€žÃ¤Â¸Å Ã¤Â¼Â Ã¦â€°Â¹Ã¦Â¬Â¡");
           setResuming(false);
           return;
         }
@@ -123,11 +129,11 @@ export function ProjectDetailPage() {
         const matchingFiles = availableFiles.get(key) ?? [];
         const matchingFile = matchingFiles.shift();
         const session = matchingFile ? batch.upload_sessions.find((item) => item.file_id === matchingFile.id) : undefined;
-        if (!session || !localFile) throw new Error("上传会话与文件数量不一致");
+        if (!session || !localFile) throw new Error("Ã¤Â¸Å Ã¤Â¼Â Ã¤Â¼Å¡Ã¨Â¯ÂÃ¤Â¸Å½Ã¦â€“â€¡Ã¤Â»Â¶Ã¦â€¢Â°Ã©â€¡ÂÃ¤Â¸ÂÃ¤Â¸â‚¬Ã¨â€¡Â´");
         if (session.upload_mode === "direct" && session.upload_url) {
           try {
             const response = await fetch(session.upload_url, { method: "PUT", body: localFile, headers: { "Content-Type": localFile.type || "application/octet-stream" } });
-            if (!response.ok) throw new Error(`直传失败: ${localFile.name}`);
+            if (!response.ok) throw new Error(`Ã§â€ºÂ´Ã¤Â¼Â Ã¥Â¤Â±Ã¨Â´Â¥: ${localFile.name}`);
           } catch {
             await uploadBatchFileContent(batch.id, session.file_id, localFile);
           }
@@ -149,9 +155,9 @@ export function ProjectDetailPage() {
             let etag = "";
             try {
               const response = await fetch(url, { method: "PUT", body: chunk });
-              if (!response.ok) throw new Error(`分片上传失败: ${localFile.name}`);
+              if (!response.ok) throw new Error(`Ã¥Ë†â€ Ã§â€°â€¡Ã¤Â¸Å Ã¤Â¼Â Ã¥Â¤Â±Ã¨Â´Â¥: ${localFile.name}`);
               etag = response.headers.get("ETag")?.replace(/"/g, "") ?? "";
-              if (!etag) throw new Error("R2 未返回 ETag");
+              if (!etag) throw new Error("R2 Ã¦Å“ÂªÃ¨Â¿â€Ã¥â€ºÅ¾ ETag");
             } catch {
               etag = (await uploadMultipartPartContent(batch.id, session.file_id, partNumber, chunk)).etag;
             }
@@ -169,10 +175,10 @@ export function ProjectDetailPage() {
       localStorage.removeItem(`vision-capital-ai:batch:${batch.id}:manifest`);
       setSelectedFiles([]);
       setResumableBatch(null);
-      message.success("批次已提交，解析正在后台进行");
+      message.success("Ã¦â€°Â¹Ã¦Â¬Â¡Ã¥Â·Â²Ã¦ÂÂÃ¤ÂºÂ¤Ã¯Â¼Å’Ã¨Â§Â£Ã¦Å¾ÂÃ¦Â­Â£Ã¥Å“Â¨Ã¥ÂÅ½Ã¥ÂÂ°Ã¨Â¿â€ºÃ¨Â¡Å’");
       await load();
     } catch (error) {
-      message.error(error instanceof Error ? error.message : "批量上传失败");
+      message.error(error instanceof Error ? error.message : "Ã¦â€°Â¹Ã©â€¡ÂÃ¤Â¸Å Ã¤Â¼Â Ã¥Â¤Â±Ã¨Â´Â¥");
     } finally {
       setSubmitting(false);
     }
@@ -184,7 +190,7 @@ export function ProjectDetailPage() {
     try {
       setChatResult(await askProject(projectId, question.trim()));
     } catch (error: any) {
-      message.error(error?.response?.data?.detail ?? "问答请求失败");
+      message.error(error?.response?.data?.detail ?? "Ã©â€”Â®Ã§Â­â€Ã¨Â¯Â·Ã¦Â±â€šÃ¥Â¤Â±Ã¨Â´Â¥");
     } finally {
       setChatting(false);
     }
@@ -196,9 +202,9 @@ export function ProjectDetailPage() {
     try {
       await generateReport(projectId);
       await load();
-      message.success("报告已生成");
+      message.success("Ã¦Å Â¥Ã¥â€˜Å Ã¥Â·Â²Ã§â€Å¸Ã¦Ë†Â");
     } catch (error: any) {
-      message.error(error?.response?.data?.detail ?? "报告生成失败");
+      message.error(error?.response?.data?.detail ?? "Ã¦Å Â¥Ã¥â€˜Å Ã§â€Å¸Ã¦Ë†ÂÃ¥Â¤Â±Ã¨Â´Â¥");
     } finally {
       setGenerating(false);
     }
@@ -210,24 +216,24 @@ export function ProjectDetailPage() {
       await retryFile(fileId);
       await load();
     } catch (error: any) {
-      message.error(error?.response?.data?.detail ?? "重试解析失败");
+      message.error(error?.response?.data?.detail ?? "Ã©â€¡ÂÃ¨Â¯â€¢Ã¨Â§Â£Ã¦Å¾ÂÃ¥Â¤Â±Ã¨Â´Â¥");
     } finally {
       setRetryingFileId(null);
     }
   };
 
-  return (
-    <div className="page-stack">
-      <Card className="glass-card" loading={loading}><Typography.Title level={2}>{project?.name}</Typography.Title><Typography.Paragraph>{project?.description}</Typography.Paragraph></Card>
-      <Tabs items={[
-        { key: "overview", label: "项目概览", children: <Row gutter={[16, 16]}><Col span={8}><Card className="glass-card" title="公司">{project?.company_name}</Card></Col><Col span={8}><Card className="glass-card" title="行业">{project?.industry}</Card></Col><Col span={8}><Card className="glass-card" title="阶段">{project?.stage}</Card></Col></Row> },
-        { key: "files", label: "文档资料", children: <Card className="glass-card" extra={<><Upload {...uploadProps} disabled={submitting || resuming}><Button disabled={submitting || resuming}>选择文件</Button></Upload><Button type="primary" loading={submitting || resuming} disabled={!selectedFiles.length || submitting || resuming} onClick={() => void submitBatch()}>开始批量解析</Button></>}>
-          {batchId && <Progress percent={batchProgress} status={batchProgress === 100 ? "success" : "active"} />}
-          <List dataSource={files} renderItem={(file) => <List.Item><List.Item.Meta title={file.filename} description={`${file.parse_status} · ${file.parse_stage} · ${file.content_type}${file.parse_error ? ` · ${file.parse_error}` : ""}`} /><Progress percent={file.progress} size="small" style={{ width: 180 }} status={file.parse_status === "failed" ? "exception" : undefined} />{file.parse_status === "failed" && <Button type="link" loading={retryingFileId === file.id} onClick={() => void retryParse(file.id)}>重试解析</Button>}</List.Item>} />
-        </Card> },
-        { key: "chat", label: "AI 问答", children: <Card className="glass-card"><Input.TextArea rows={4} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="例如：请总结该公司的核心投资亮点和主要风险" /><Button type="primary" loading={chatting} disabled={!question.trim()} style={{ marginTop: 12 }} onClick={() => void submitQuestion()}>发起分析</Button>{chatResult && <div style={{ marginTop: 16 }}><Typography.Title level={4}>回答</Typography.Title><Typography.Paragraph>{chatResult.answer}</Typography.Paragraph><List dataSource={chatResult.citations} renderItem={(citation) => <List.Item><List.Item.Meta title={citation.filename} description={citation.content} /></List.Item>} /></div>}</Card> },
-        { key: "reports", label: "投研报告", children: <Card className="glass-card" extra={<Button type="primary" loading={generating} onClick={() => void submitReport()}>生成报告</Button>}><List dataSource={reports} renderItem={(report) => <List.Item><List.Item.Meta title={report.title} description={report.content.slice(0, 280)} /></List.Item>} /></Card> },
-      ]} />
-    </div>
-  );
+  const submitPreset = (value: string) => { setQuestion(value); void submitQuestion(); };
+  const toggleTask = (id: string) => setTasks((items) => items.map((item) => item.id === id ? { ...item, done: !item.done } : item));
+  const statusLabel = project ? ({ pre_investment: "æŠ•å‰", in_progress: "æŠ•ä¸­", post_investment: "æŠ•åŽ", rejected: "å·²æ”¾å¼ƒ", exited: "å·²é€€å‡º" } as Record<string, string>)[project.investment_status] ?? project.stage : "æŠ•å‰";
+  const overview = <div className="detail-stack"><Row gutter={[16, 16]}><Col xs={24} md={8}><Metric icon={<FileTextOutlined />} label="é¡¹ç›®é˜¶æ®µ" value={statusLabel} /></Col><Col xs={24} md={8}><Metric icon={<SafetyCertificateOutlined />} label="èµ„æ–™å®Œæ•´åº¦" value={(files.length ? Math.round(files.filter((file) => file.parse_status === "completed").length / files.length * 100) : 0) + "%"} /></Col><Col xs={24} md={8}><Metric icon={<RobotOutlined />} label="AI æ´žå¯Ÿ" value={chatResult ? "å·²ç”Ÿæˆ" : "å¾…ç ”ç©¶"} /></Col></Row><Card className="workspace-panel" title="é¡¹ç›®æ‘˜è¦"><Descriptions column={{ xs: 1, md: 2 }} items={[{ key: "company", label: "å…¬å¸", children: project?.company_name }, { key: "industry", label: "è¡Œä¸š", children: project?.industry }, { key: "stage", label: "å½“å‰è½®æ¬¡", children: project?.stage }, { key: "status", label: "æŠ•èµ„çŠ¶æ€", children: statusLabel }]} /><Typography.Paragraph className="project-description">{project?.description || "è¿˜æ²¡æœ‰é¡¹ç›®æ‘˜è¦ã€‚ä¸Šä¼  BP æˆ–è¡¥å……é¡¹ç›®ä»‹ç»åŽï¼ŒAI ä¼šè‡ªåŠ¨å»ºç«‹é¡¹ç›®ç”»åƒã€‚"}</Typography.Paragraph></Card></div>;
+  const materials = <div className="detail-stack"><Card className="workspace-panel material-upload" title="èµ„æ–™ä¸­å¿ƒ" extra={<Space><Upload {...uploadProps} disabled={submitting || resuming}><Button disabled={submitting || resuming}>é€‰æ‹©æ–‡ä»¶</Button></Upload><Button type="primary" loading={submitting || resuming} disabled={!selectedFiles.length || submitting || resuming} onClick={() => void submitBatch()}>å¼€å§‹è§£æž</Button></Space>}><Typography.Paragraph type="secondary">æ”¯æŒ BPã€è´¢æŠ¥ã€åˆåŒã€å°½è°ƒæŠ¥å‘Šã€è¡Œä¸šç ”ç©¶ã€æ–°é—»å’Œå›¾ç‰‡æ‰«æä»¶ã€‚ä¸Šä¼ åŽä¼šè‡ªåŠ¨è¿›å…¥ OCRã€è¡¨æ ¼æå–å’Œ AI ç»“æž„åŒ–æµç¨‹ã€‚</Typography.Paragraph>{batchId && <div className="batch-progress"><Progress percent={batchProgress} status={batchProgress === 100 ? "success" : "active"} /><span>è§£æžè¿›åº¦å®žæ—¶åŒæ­¥</span></div>}<List dataSource={files} locale={{ emptyText: "è¿˜æ²¡æœ‰é¡¹ç›®èµ„æ–™" }} renderItem={(file) => <List.Item><List.Item.Meta avatar={<span className="file-type-icon"><FileTextOutlined /></span>} title={file.filename} description={file.parse_stage + " Â· " + file.content_type + (file.parse_error ? " Â· " + file.parse_error : "")} /><Space><Tag color={file.parse_status === "completed" ? "green" : file.parse_status === "failed" ? "red" : "gold"}>{file.parse_status}</Tag><Progress percent={file.progress} size="small" className="file-progress" />{file.parse_status === "failed" && <Button type="link" loading={retryingFileId === file.id} onClick={() => void retryParse(file.id)}>é‡è¯•</Button>}</Space></List.Item>} /></Card></div>;
+  const analysis = <div className="detail-stack"><Card className="workspace-panel analysis-panel" title="AI åˆ†æž" extra={<Tag color="cyan">åŸºäºŽé¡¹ç›®èµ„æ–™</Tag>}><div className="preset-grid"><Button onClick={() => submitPreset("æ€»ç»“è¿™å®¶å…¬å¸çš„æ ¸å¿ƒæŠ•èµ„äº®ç‚¹ã€å•†ä¸šæ¨¡å¼å’Œä¸»è¦é£Žé™©")}>æŠ•èµ„äº®ç‚¹ä¸Žé£Žé™© <ArrowRightOutlined /></Button><Button onClick={() => submitPreset("åˆ†æžå…¬å¸çš„å¸‚åœºç©ºé—´ã€ç«žäº‰æ ¼å±€å’Œå¢žé•¿é©±åŠ¨")}>å¸‚åœºä¸Žç«žäº‰æ ¼å±€ <ArrowRightOutlined /></Button><Button onClick={() => submitPreset("ä»Žè´¢åŠ¡ã€å›¢é˜Ÿå’Œåˆè§„è§’åº¦åˆ—å‡ºå°½è°ƒé—®é¢˜")}>ç”Ÿæˆå°½è°ƒé—®é¢˜æ¸…å• <ArrowRightOutlined /></Button></div><Input.TextArea rows={4} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="ä¹Ÿå¯ä»¥ç›´æŽ¥é—®é¡¹ç›®ï¼Œä¾‹å¦‚ï¼šè¿™å®¶å…¬å¸æ˜¯å¦å€¼å¾—è¿›å…¥ä¸‹ä¸€è½®å°½è°ƒï¼Ÿ" /><Button type="primary" loading={chatting} disabled={!question.trim()} onClick={() => void submitQuestion()} className="analysis-submit">å‘èµ·åˆ†æž</Button>{chatResult && <div className="analysis-result"><span className="eyebrow">AI ç ”ç©¶ç»“è®º</span><Typography.Paragraph>{chatResult.answer}</Typography.Paragraph><Typography.Title level={5}>å¼•ç”¨èµ„æ–™</Typography.Title><List dataSource={chatResult.citations} renderItem={(citation) => <List.Item><List.Item.Meta title={citation.filename} description={citation.content} /></List.Item>} /></div>}</Card></div>;
+  const diligence = <div className="detail-stack"><Alert message="å°½è°ƒæ¸…å•ä¼šéšç€ AI åˆ†æžå’Œèµ„æ–™è§£æžç»“æžœæŒç»­æ›´æ–°" description="å…ˆå®Œæˆå…³é”®èµ„æ–™ä¸Šä¼ ï¼Œå†æŒ‰ä¼˜å…ˆçº§æŽ¨è¿›å¾…åŠžäº‹é¡¹ã€‚" type="info" showIcon /><Card className="workspace-panel" title="å°½è°ƒä¸Žä»»åŠ¡"><List dataSource={tasks} renderItem={(task) => <List.Item actions={[<Button type="link" onClick={() => toggleTask(task.id)}>{task.done ? "æ ‡è®°æœªå®Œæˆ" : "å®Œæˆ"}</Button>]}><List.Item.Meta avatar={task.done ? <CheckCircleOutlined className="task-complete" /> : <span className="task-number">!</span>} title={<span className={task.done ? "task-done" : ""}>{task.label}</span>} description={task.done ? "å·²å®Œæˆ" : "ç­‰å¾…ä½ çš„ç¡®è®¤"} /></List.Item>} /></Card></div>;
+  const reportsPanel = <div className="detail-stack"><Card className="workspace-panel" title="æŠ¥å‘Šä¸Žå†³ç­–" extra={<Button type="primary" loading={generating} onClick={() => void submitReport()}>ç”ŸæˆæŠ•ç ”æŠ¥å‘Š</Button>}><Typography.Paragraph type="secondary">å°†é¡¹ç›®èµ„æ–™ã€AI åˆ†æžã€é£Žé™©å’Œå°½è°ƒé—®é¢˜æ±‡æ€»ä¸ºä¸€ä»½å¯ä¾›å†³ç­–ä¼šä½¿ç”¨çš„æŠ¥å‘Šã€‚</Typography.Paragraph><List dataSource={reports} locale={{ emptyText: "æš‚æ—¶æ²¡æœ‰æŠ¥å‘Š" }} renderItem={(report) => <List.Item><List.Item.Meta avatar={<span className="report-icon"><FileTextOutlined /></span>} title={report.title} description={report.content.slice(0, 280)} /><Button type="link">æŸ¥çœ‹æŠ¥å‘Š</Button></List.Item>} /></Card></div>;
+  const monitoring = <div className="detail-stack"><Row gutter={[16, 16]}><Col xs={24} md={8}><Metric label="ç»è¥çŠ¶æ€" value="æŒç»­è·Ÿè¸ª" /></Col><Col xs={24} md={8}><Metric label="æœ¬æœŸé£Žé™©" value="å¾…æ›´æ–°" /></Col><Col xs={24} md={8}><Metric label="ä¸‹æ¬¡è·Ÿè¿›" value="æœ¬å‘¨" /></Col></Row><Card className="workspace-panel" title="æŠ•åŽç›‘æŽ§"><Alert message="æŠ•åŽç›‘æŽ§å³å°†å¼€å§‹" description="å½“å‰é¡¹ç›®è¿˜æ²¡æœ‰ç»è¥æ•°æ®æˆ–å®šæœŸå›žè®¿è®°å½•ã€‚å®ŒæˆæŠ•èµ„å†³ç­–åŽï¼Œå¯åœ¨è¿™é‡ŒæŒç»­è·Ÿè¸ªç»è¥ã€è´¢åŠ¡å’Œé£Žé™©å˜åŒ–ã€‚" type="warning" showIcon /><div className="monitoring-placeholder"><SafetyCertificateOutlined /><span>ç»è¥æ•°æ®ã€å…³é”®æŒ‡æ ‡å’Œé£Žé™©é¢„è­¦ä¼šé›†ä¸­å±•ç¤ºåœ¨è¿™é‡Œ</span></div></Card></div>;
+  return <div className="page-stack project-detail-page"><Card className="project-hero" loading={loading}><div><span className="eyebrow">INVESTMENT PROJECT</span><Typography.Title level={1}>{project?.name ?? "é¡¹ç›®è¯¦æƒ…"}</Typography.Title><Typography.Paragraph>{project?.company_name} Â· {project?.industry}</Typography.Paragraph></div><Tag color="blue">{statusLabel}</Tag></Card><Tabs className="project-tabs" items={[{ key: "overview", label: "é¡¹ç›®æ€»è§ˆ", children: overview }, { key: "materials", label: "èµ„æ–™ä¸­å¿ƒ", children: materials }, { key: "analysis", label: "AI åˆ†æž", children: analysis }, { key: "diligence", label: "å°½è°ƒä¸Žä»»åŠ¡", children: diligence }, { key: "reports", label: "æŠ¥å‘Šä¸Žå†³ç­–", children: reportsPanel }, { key: "monitoring", label: "æŠ•åŽç›‘æŽ§", children: monitoring }]} /></div>;
 }
+
+function Metric({ icon, label, value }: { icon?: React.ReactNode; label: string; value: string }) { return <Card className="metric-card detail-metric"><div className="detail-metric-icon">{icon}</div><Typography.Text type="secondary">{label}</Typography.Text><Typography.Title level={3}>{value}</Typography.Title></Card>; }
+
+
