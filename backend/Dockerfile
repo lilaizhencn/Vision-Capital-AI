@@ -12,6 +12,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+RUN addgroup --system app && adduser --system --ingroup app app \
+    && mkdir -p /app/storage_data \
+    && chown -R app:app /app
+USER app
 
 EXPOSE 8000
 

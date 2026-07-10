@@ -53,8 +53,9 @@ vision-capital-ai/
    - `celery -A app.workers.celery_app.celery_app worker --loglevel=info`
 6. 安装前端依赖并启动前端：
    - `cd frontend`
-   - `npm install`
-   - `npm run dev`
+   - `corepack enable`
+   - `pnpm install --frozen-lockfile`
+   - `pnpm run dev`
 
 ## Docker Compose 启动方式
 

@@ -39,6 +39,7 @@ services:
     command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     volumes:
       - ./backend:/app
+      - backend_storage:/app/storage_data
     env_file:
       - ${BACKEND_ENV_FILE:-./backend/.env.example}
     ports:
@@ -62,6 +63,7 @@ services:
     command: celery -A app.workers.celery_app.celery_app worker --loglevel=info
     volumes:
       - ./backend:/app
+      - backend_storage:/app/storage_data
     env_file:
       - ${BACKEND_ENV_FILE:-./backend/.env.example}
     depends_on:
@@ -90,3 +92,4 @@ services:
 
 volumes:
   postgres_data:
+  backend_storage:
