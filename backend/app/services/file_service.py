@@ -114,3 +114,17 @@ class FileService:
 
         self.storage.delete_file(file.r2_object_key)
         self.file_repo.delete(file)
+
+    def retry(self, file_id: str, user: User):
+        file = self.file_repo.get(file_id)
+        if not file or not self.project_repo.get_for_owner(file.project_id, user.id):
+            raise HTTPException(status_code=404, detail="File not found")
+        if file.parse_status != ParseStatus.failed:
+            raise HTTPException(status_code=409, detail="Only failed files can be retried")
+        file.parse_status = ParseStatus.pending
+        file.parse_stage = ParseStage.validate
+        file.progress = 10
+        file.parse_error = None
+        self.db.commit()
+        parse_uploaded_file_task.delay(file.id)
+        return file

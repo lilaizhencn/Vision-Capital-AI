@@ -83,6 +83,11 @@ export async function completeMultipart(batchId: string, fileId: string, parts: 
   await client.post(`/api/file-batches/${batchId}/files/${fileId}/complete-multipart`, { parts });
 }
 
+export async function retryFile(fileId: string) {
+  const { data } = await client.post<ProjectFile>(`/api/files/${fileId}/retry`);
+  return data;
+}
+
 export async function askProject(projectId: string, message: string) {
   const { data } = await client.post<ChatResponse>(`/api/projects/${projectId}/chat`, { message });
   return data;

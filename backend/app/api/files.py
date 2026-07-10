@@ -101,3 +101,8 @@ def get_file(file_id: str, db: Session = Depends(get_db), user: User = Depends(g
 def delete_file(file_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     FileService(db).delete(file_id, user)
     return {"message": "File deleted"}
+
+
+@router.post("/api/files/{file_id}/retry", response_model=FileRead)
+def retry_file(file_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    return FileService(db).retry(file_id, user)

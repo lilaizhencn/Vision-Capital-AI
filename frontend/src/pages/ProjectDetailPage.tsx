@@ -3,7 +3,7 @@ import type { UploadFile, UploadProps } from "antd";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
-import { askProject, completeFileBatch, completeMultipart, createFileBatch, generateReport, getMultipartPartUrl, getProject, getProjectFiles, getReports, uploadBatchFileContent } from "../api/services";
+import { askProject, completeFileBatch, completeMultipart, createFileBatch, generateReport, getMultipartPartUrl, getProject, getProjectFiles, getReports, retryFile, uploadBatchFileContent } from "../api/services";
 import type { ChatResponse, Project, ProjectFile, Report } from "../types";
 
 export function ProjectDetailPage() {
@@ -89,7 +89,7 @@ export function ProjectDetailPage() {
         { key: "overview", label: "项目概览", children: <Row gutter={[16, 16]}><Col span={8}><Card className="glass-card" title="公司">{project?.company_name}</Card></Col><Col span={8}><Card className="glass-card" title="行业">{project?.industry}</Card></Col><Col span={8}><Card className="glass-card" title="阶段">{project?.stage}</Card></Col></Row> },
         { key: "files", label: "文档资料", children: <Card className="glass-card" extra={<><Upload {...uploadProps}><Button>选择文件</Button></Upload><Button type="primary" disabled={!selectedFiles.length} onClick={() => void submitBatch()}>开始批量解析</Button></>}>
           {batchId && <Progress percent={batchProgress} status={batchProgress === 100 ? "success" : "active"} />}
-          <List dataSource={files} renderItem={(file) => <List.Item><List.Item.Meta title={file.filename} description={`${file.parse_status} · ${file.parse_stage} · ${file.content_type}${file.parse_error ? ` · ${file.parse_error}` : ""}`} /><Progress percent={file.progress} size="small" style={{ width: 180 }} status={file.parse_status === "failed" ? "exception" : undefined} /></List.Item>} />
+          <List dataSource={files} renderItem={(file) => <List.Item><List.Item.Meta title={file.filename} description={`${file.parse_status} · ${file.parse_stage} · ${file.content_type}${file.parse_error ? ` · ${file.parse_error}` : ""}`} /><Progress percent={file.progress} size="small" style={{ width: 180 }} status={file.parse_status === "failed" ? "exception" : undefined} />{file.parse_status === "failed" && <Button type="link" onClick={async () => { await retryFile(file.id); await load(); }}>重试解析</Button>}</List.Item>} />
         </Card> },
         { key: "chat", label: "AI 问答", children: <Card className="glass-card"><Input.TextArea rows={4} value={question} onChange={(event) => setQuestion(event.target.value)} /><Button type="primary" style={{ marginTop: 12 }} onClick={async () => setChatResult(await askProject(projectId, question))}>发起分析</Button>{chatResult && <div style={{ marginTop: 16 }}><Typography.Title level={4}>回答</Typography.Title><Typography.Paragraph>{chatResult.answer}</Typography.Paragraph><List dataSource={chatResult.citations} renderItem={(citation) => <List.Item><List.Item.Meta title={citation.filename} description={citation.content} /></List.Item>} /></div>}</Card> },
         { key: "reports", label: "投研报告", children: <Card className="glass-card" extra={<Button type="primary" onClick={async () => { await generateReport(projectId); await load(); }}>生成报告</Button>}><List dataSource={reports} renderItem={(report) => <List.Item><List.Item.Meta title={report.title} description={report.content.slice(0, 280)} /></List.Item>} /></Card> },
