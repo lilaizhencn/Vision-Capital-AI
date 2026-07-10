@@ -89,6 +89,17 @@ export interface Report {
   created_at: string;
 }
 
+export interface MonitoringUpdate {
+  id: string;
+  project_id: string;
+  metric_name: string;
+  metric_value: string;
+  metric_unit: string;
+  risk_level: "normal" | "watch" | "high";
+  note: string;
+  created_at: string;
+}
+
 export interface DashboardSummary {
   total_projects: number;
   pre_investment_projects: number;

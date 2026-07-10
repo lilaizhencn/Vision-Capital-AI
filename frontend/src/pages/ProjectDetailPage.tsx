@@ -1,17 +1,21 @@
 import { ArrowRightOutlined, CheckCircleOutlined, FileTextOutlined, RobotOutlined, SafetyCertificateOutlined } from "@ant-design/icons";
-import { Alert, Button, Card, Col, Descriptions, Input, List, Progress, Row, Space, Tabs, Tag, Typography, Upload, message } from "antd";
+import { Alert, Button, Card, Col, Descriptions, Form, Input, List, Modal, Progress, Row, Select, Space, Tabs, Tag, Typography, Upload, message } from "antd";
 import type { UploadFile, UploadProps } from "antd";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
-import { askProject, completeFileBatch, completeMultipart, createFileBatch, generateReport, getFileBatch, getMultipartPartUrl, getProject, getProjectFiles, getReports, getUploadedParts, retryFile, uploadBatchFileContent, uploadMultipartPartContent } from "../api/services";
-import type { ChatResponse, Project, ProjectFile, Report } from "../types";
+import { askProject, completeFileBatch, completeMultipart, createFileBatch, createMonitoringUpdate, generateReport, getFileBatch, getMonitoringUpdates, getMultipartPartUrl, getProject, getProjectFiles, getReports, getUploadedParts, retryFile, uploadBatchFileContent, uploadMultipartPartContent } from "../api/services";
+import type { ChatResponse, MonitoringUpdate, Project, ProjectFile, Report } from "../types";
 
 export function ProjectDetailPage() {
   const { projectId = "" } = useParams();
   const [project, setProject] = useState<Project | null>(null);
   const [files, setFiles] = useState<ProjectFile[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
+  const [monitoring, setMonitoring] = useState<MonitoringUpdate[]>([]);
+  const [monitoringOpen, setMonitoringOpen] = useState(false);
+  const [savingMonitoring, setSavingMonitoring] = useState(false);
+  const [reportPreview, setReportPreview] = useState<Report | null>(null);
   const [question, setQuestion] = useState("");
   const [chatResult, setChatResult] = useState<ChatResponse | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<UploadFile[]>([]);
@@ -32,14 +36,16 @@ export function ProjectDetailPage() {
 
   const load = async () => {
     try {
-      const [nextProject, nextFiles, nextReports] = await Promise.all([
+      const [nextProject, nextFiles, nextReports, nextMonitoring] = await Promise.all([
         getProject(projectId),
         getProjectFiles(projectId),
         getReports(projectId),
+        getMonitoringUpdates(projectId),
       ]);
       setProject(nextProject);
       setFiles(Array.isArray(nextFiles) ? nextFiles : []);
       setReports(Array.isArray(nextReports) ? nextReports : []);
+      setMonitoring(Array.isArray(nextMonitoring) ? nextMonitoring : []);
     } catch (error: any) {
       message.error(error?.response?.data?.detail ?? "无法加载项目详情");
     } finally {
@@ -210,6 +216,21 @@ export function ProjectDetailPage() {
     }
   };
 
+  const submitMonitoring = async (values: Omit<MonitoringUpdate, "id" | "project_id" | "created_at">) => {
+    if (savingMonitoring) return;
+    setSavingMonitoring(true);
+    try {
+      await createMonitoringUpdate(projectId, values);
+      setMonitoringOpen(false);
+      await load();
+      message.success("监控记录已保存");
+    } catch (error: any) {
+      message.error(error?.response?.data?.detail ?? "监控记录保存失败");
+    } finally {
+      setSavingMonitoring(false);
+    }
+  };
+
   const retryParse = async (fileId: string) => {
     setRetryingFileId(fileId);
     try {
@@ -229,9 +250,10 @@ export function ProjectDetailPage() {
   const materials = <div className="detail-stack"><Card className="workspace-panel material-upload" title="资料中心" extra={<Space><Upload {...uploadProps} disabled={submitting || resuming}><Button disabled={submitting || resuming}>选择文件</Button></Upload><Button type="primary" loading={submitting || resuming} disabled={!selectedFiles.length || submitting || resuming} onClick={() => void submitBatch()}>开始解析</Button></Space>}><Typography.Paragraph type="secondary">支持 BP、财报、合同、尽调报告、行业研究、新闻和图片扫描件。上传后会自动进入 OCR、表格提取和 AI 结构化流程。</Typography.Paragraph>{batchId && <div className="batch-progress"><Progress percent={batchProgress} status={batchProgress === 100 ? "success" : "active"} /><span>解析进度实时同步</span></div>}<List dataSource={files} locale={{ emptyText: "还没有项目资料" }} renderItem={(file) => <List.Item><List.Item.Meta avatar={<span className="file-type-icon"><FileTextOutlined /></span>} title={file.filename} description={file.parse_stage + " · " + file.content_type + (file.parse_error ? " · " + file.parse_error : "")} /><Space><Tag color={file.parse_status === "completed" ? "green" : file.parse_status === "failed" ? "red" : "gold"}>{file.parse_status}</Tag><Progress percent={file.progress} size="small" className="file-progress" />{file.parse_status === "failed" && <Button type="link" loading={retryingFileId === file.id} onClick={() => void retryParse(file.id)}>重试</Button>}</Space></List.Item>} /></Card></div>;
   const analysis = <div className="detail-stack"><Card className="workspace-panel analysis-panel" title="AI 分析" extra={<Tag color="cyan">基于项目资料</Tag>}><div className="preset-grid"><Button onClick={() => submitPreset("总结这家公司的核心投资亮点、商业模式和主要风险")}>投资亮点与风险 <ArrowRightOutlined /></Button><Button onClick={() => submitPreset("分析公司的市场空间、竞争格局和增长驱动")}>市场与竞争格局 <ArrowRightOutlined /></Button><Button onClick={() => submitPreset("从财务、团队和合规角度列出尽调问题")}>生成尽调问题清单 <ArrowRightOutlined /></Button></div><Input.TextArea rows={4} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="也可以直接问项目,例如:这家公司是否值得进入下一轮尽调?" /><Button type="primary" loading={chatting} disabled={!question.trim()} onClick={() => void submitQuestion()} className="analysis-submit">发起分析</Button>{chatResult && <div className="analysis-result"><span className="eyebrow">AI 研究结论</span><Typography.Paragraph>{chatResult.answer}</Typography.Paragraph><Typography.Title level={5}>引用资料</Typography.Title><List dataSource={chatResult.citations} renderItem={(citation) => <List.Item><List.Item.Meta title={citation.filename} description={citation.content} /></List.Item>} /></div>}</Card></div>;
   const diligence = <div className="detail-stack"><Alert message="尽调清单会随着 AI 分析和资料解析结果持续更新" description="先完成关键资料上传,再按优先级推进待办事项。" type="info" showIcon /><Card className="workspace-panel" title="尽调与任务"><List dataSource={tasks} renderItem={(task) => <List.Item actions={[<Button type="link" onClick={() => toggleTask(task.id)}>{task.done ? "标记未完成" : "完成"}</Button>]}><List.Item.Meta avatar={task.done ? <CheckCircleOutlined className="task-complete" /> : <span className="task-number">!</span>} title={<span className={task.done ? "task-done" : ""}>{task.label}</span>} description={task.done ? "已完成" : "等待你的确认"} /></List.Item>} /></Card></div>;
-  const reportsPanel = <div className="detail-stack"><Card className="workspace-panel" title="报告与决策" extra={<Button type="primary" loading={generating} onClick={() => void submitReport()}>生成投研报告</Button>}><Typography.Paragraph type="secondary">将项目资料、AI 分析、风险和尽调问题汇总为一份可供决策会使用的报告。</Typography.Paragraph><List dataSource={reports} locale={{ emptyText: "暂时没有报告" }} renderItem={(report) => <List.Item><List.Item.Meta avatar={<span className="report-icon"><FileTextOutlined /></span>} title={report.title} description={report.content.slice(0, 280)} /><Button type="link">查看报告</Button></List.Item>} /></Card></div>;
-  const monitoring = <div className="detail-stack"><Row gutter={[16, 16]}><Col xs={24} md={8}><Metric label="经营状态" value="持续跟踪" /></Col><Col xs={24} md={8}><Metric label="本期风险" value="待更新" /></Col><Col xs={24} md={8}><Metric label="下次跟进" value="本周" /></Col></Row><Card className="workspace-panel" title="投后监控"><Alert message="投后监控即将开始" description="当前项目还没有经营数据或定期回访记录。完成投资决策后,可在这里持续跟踪经营、财务和风险变化。" type="warning" showIcon /><div className="monitoring-placeholder"><SafetyCertificateOutlined /><span>经营数据、关键指标和风险预警会集中展示在这里</span></div></Card></div>;
-  return <div className="page-stack project-detail-page"><Card className="project-hero" loading={loading}><div><span className="eyebrow">INVESTMENT PROJECT</span><Typography.Title level={1}>{project?.name ?? "项目详情"}</Typography.Title><Typography.Paragraph>{project?.company_name} · {project?.industry}</Typography.Paragraph></div><Tag color="blue">{statusLabel}</Tag></Card><Tabs className="project-tabs" items={[{ key: "overview", label: "项目总览", children: overview }, { key: "materials", label: "资料中心", children: materials }, { key: "analysis", label: "AI 分析", children: analysis }, { key: "diligence", label: "尽调与任务", children: diligence }, { key: "reports", label: "报告与决策", children: reportsPanel }, { key: "monitoring", label: "投后监控", children: monitoring }]} /></div>;
+  const reportsPanel = <div className="detail-stack"><Card className="workspace-panel" title="报告与决策" extra={<Button type="primary" loading={generating} onClick={() => void submitReport()}>生成投研报告</Button>}><Typography.Paragraph type="secondary">将项目资料、AI 分析、风险和尽调问题汇总为一份可供决策会使用的报告。</Typography.Paragraph><List dataSource={reports} locale={{ emptyText: "暂时没有报告" }} renderItem={(report) => <List.Item><List.Item.Meta avatar={<span className="report-icon"><FileTextOutlined /></span>} title={report.title} description={report.content.slice(0, 280)} /><Button type="link" onClick={() => setReportPreview(report)}>查看报告</Button></List.Item>} /></Card></div>;
+  const latestRisk = monitoring.find((item) => item.risk_level !== "normal");
+  const monitoringPanel = <div className="detail-stack"><Row gutter={[16, 16]}><Col xs={24} md={8}><Metric label="监控记录" value={`${monitoring.length} 条`} /></Col><Col xs={24} md={8}><Metric label="本期风险" value={latestRisk ? (latestRisk.risk_level === "high" ? "高风险" : "需关注") : "正常"} /></Col><Col xs={24} md={8}><Metric label="最近更新" value={monitoring[0] ? new Date(monitoring[0].created_at).toLocaleDateString("zh-CN") : "暂无"} /></Col></Row><Card className="workspace-panel" title="投后监控" extra={<Button type="primary" onClick={() => setMonitoringOpen(true)}>新增监控记录</Button>}><List dataSource={monitoring} locale={{ emptyText: "还没有监控记录，请先录入经营指标或风险变化" }} renderItem={(item) => <List.Item><List.Item.Meta title={<Space><span>{item.metric_name}</span><Tag color={item.risk_level === "high" ? "red" : item.risk_level === "watch" ? "gold" : "green"}>{item.risk_level === "high" ? "高风险" : item.risk_level === "watch" ? "需关注" : "正常"}</Tag></Space>} description={`${item.metric_value}${item.metric_unit} · ${item.note || "暂无备注"}`} /><Typography.Text type="secondary">{new Date(item.created_at).toLocaleDateString("zh-CN")}</Typography.Text></List.Item>} /></Card></div>;
+  return <div className="page-stack project-detail-page"><Card className="project-hero" loading={loading}><div><span className="eyebrow">INVESTMENT PROJECT</span><Typography.Title level={1}>{project?.name ?? "项目详情"}</Typography.Title><Typography.Paragraph>{project?.company_name} · {project?.industry}</Typography.Paragraph></div><Tag color="blue">{statusLabel}</Tag></Card><Tabs className="project-tabs" items={[{ key: "overview", label: "项目总览", children: overview }, { key: "materials", label: "资料中心", children: materials }, { key: "analysis", label: "AI 分析", children: analysis }, { key: "diligence", label: "尽调与任务", children: diligence }, { key: "reports", label: "报告与决策", children: reportsPanel }, { key: "monitoring", label: "投后监控", children: monitoringPanel }]} /><Modal title="新增投后监控记录" open={monitoringOpen} onCancel={() => setMonitoringOpen(false)} footer={null}><Form layout="vertical" onFinish={(values) => void submitMonitoring(values)}><Form.Item name="metric_name" label="指标名称" rules={[{ required: true, message: "请输入指标名称" }]}><Input placeholder="例如：月度收入" /></Form.Item><Form.Item name="metric_value" label="指标值" rules={[{ required: true, message: "请输入指标值" }]}><Input placeholder="例如：320" /></Form.Item><Form.Item name="metric_unit" label="单位"><Input placeholder="例如：万元" /></Form.Item><Form.Item name="risk_level" label="风险状态" initialValue="normal"><Select options={[{ value: "normal", label: "正常" }, { value: "watch", label: "需关注" }, { value: "high", label: "高风险" }]} /></Form.Item><Form.Item name="note" label="备注"><Input.TextArea rows={3} /></Form.Item><Button type="primary" htmlType="submit" loading={savingMonitoring} block>保存记录</Button></Form></Modal><Modal title={reportPreview?.title} open={Boolean(reportPreview)} onCancel={() => setReportPreview(null)} footer={null}><Typography.Paragraph style={{ whiteSpace: "pre-wrap" }}>{reportPreview?.content}</Typography.Paragraph></Modal></div>;
 }
 
 function Metric({ icon, label, value }: { icon?: React.ReactNode; label: string; value: string }) { return <Card className="metric-card detail-metric"><div className="detail-metric-icon">{icon}</div><Typography.Text type="secondary">{label}</Typography.Text><Typography.Title level={3}>{value}</Typography.Title></Card>; }

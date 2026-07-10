@@ -1,5 +1,5 @@
 import client from "./client";
-import type { ChatResponse, DashboardSummary, FileBatch, Project, ProjectFile, Report, User } from "../types";
+import type { ChatResponse, DashboardSummary, FileBatch, MonitoringUpdate, Project, ProjectFile, Report, User } from "../types";
 
 export async function register(payload: { email: string; username: string; password: string }) {
   const { data } = await client.post("/api/auth/register", payload);
@@ -133,5 +133,15 @@ export async function generateReport(projectId: string) {
 
 export async function getRecentReports() {
   const { data } = await client.get<Report[]>("/api/reports");
+  return data;
+}
+
+export async function getMonitoringUpdates(projectId: string) {
+  const { data } = await client.get<MonitoringUpdate[]>(`/api/projects/${projectId}/monitoring`);
+  return data;
+}
+
+export async function createMonitoringUpdate(projectId: string, payload: Omit<MonitoringUpdate, "id" | "project_id" | "created_at">) {
+  const { data } = await client.post<MonitoringUpdate>(`/api/projects/${projectId}/monitoring`, payload);
   return data;
 }

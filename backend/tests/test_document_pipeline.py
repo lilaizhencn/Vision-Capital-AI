@@ -406,6 +406,30 @@ def test_project_dashboard_chat_and_report_flow(api_client, monkeypatch) -> None
     assert api_client.get(f"/api/projects/{project_id}", headers=headers).status_code == 404
 
 
+def test_monitoring_updates_are_persisted_and_owner_scoped(api_client) -> None:
+    token = api_client.post("/api/auth/register", json={"email": "monitor@example.com", "username": "monitor", "password": "strong-password"}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    project_id = api_client.post(
+        "/api/projects",
+        headers=headers,
+        json={"name": "Monitor QA", "company_name": "Acme", "industry": "SaaS", "stage": "Series A"},
+    ).json()["id"]
+
+    created = api_client.post(
+        f"/api/projects/{project_id}/monitoring",
+        headers=headers,
+        json={"metric_name": "月度收入", "metric_value": "320", "metric_unit": "万元", "risk_level": "watch", "note": "客户集中度需要继续跟踪"},
+    )
+    assert created.status_code == 200
+    assert created.json()["risk_level"] == "watch"
+    listed = api_client.get(f"/api/projects/{project_id}/monitoring", headers=headers)
+    assert listed.status_code == 200
+    assert listed.json()[0]["metric_name"] == "月度收入"
+
+    other_token = api_client.post("/api/auth/register", json={"email": "other-monitor@example.com", "username": "other-monitor", "password": "strong-password"}).json()["access_token"]
+    assert api_client.get(f"/api/projects/{project_id}/monitoring", headers={"Authorization": f"Bearer {other_token}"}).status_code == 404
+
+
 def test_chat_falls_back_to_recent_chunks_when_embeddings_are_unavailable(api_client, monkeypatch) -> None:
     monkeypatch.setattr(EmbeddingService, "embed_text", lambda _self, _text: (_ for _ in ()).throw(RuntimeError("embedding unavailable")))
     monkeypatch.setattr(LLMService, "generate", lambda _self, _prompt: "fallback response")
