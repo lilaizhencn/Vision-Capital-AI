@@ -4,4 +4,5 @@ from app.models.file import BatchStatus, DocumentBatch, ParseDeadLetter, ParseSt
 from app.models.project import Project
 from app.models.report import Report
 from app.models.monitoring import MonitoringUpdate
+from app.models.task import ProjectTask
 from app.models.user import User

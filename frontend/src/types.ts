@@ -100,6 +100,15 @@ export interface MonitoringUpdate {
   created_at: string;
 }
 
+export interface ProjectTask {
+  id: string;
+  project_id: string;
+  label: string;
+  done: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface DashboardSummary {
   total_projects: number;
   pre_investment_projects: number;

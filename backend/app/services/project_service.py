@@ -2,6 +2,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.models.user import User
+from app.models.task import ProjectTask
 from app.repositories.project_repository import ProjectRepository
 from app.schemas.project import ProjectCreate, ProjectUpdate
 
@@ -11,7 +12,15 @@ class ProjectService:
         self.repo = ProjectRepository(db)
 
     def create(self, payload: ProjectCreate, user: User):
-        return self.repo.create(owner_id=user.id, **payload.model_dump())
+        project = self.repo.create(owner_id=user.id, **payload.model_dump())
+        self.repo.db.add_all([
+            ProjectTask(project_id=project.id, label="补充核心团队履历与分工"),
+            ProjectTask(project_id=project.id, label="确认市场规模与竞争格局假设"),
+            ProjectTask(project_id=project.id, label="复核最新一版财务预测", done=True),
+        ])
+        self.repo.db.commit()
+        self.repo.db.refresh(project)
+        return project
 
     def list(self, user: User):
         return self.repo.list_by_owner(user.id)
@@ -33,4 +42,3 @@ class ProjectService:
     def delete(self, project_id: str, user: User):
         project = self.get(project_id, user)
         self.repo.delete(project)
-

@@ -13,6 +13,7 @@ from app.api.files import router as files_router
 from app.api.projects import router as projects_router
 from app.api.reports import router as reports_router
 from app.api.monitoring import router as monitoring_router
+from app.api.tasks import router as tasks_router
 from app.api.websocket import router as websocket_router
 from app.core.config import settings
 from app.core.database import Base, engine
@@ -61,5 +62,6 @@ app.include_router(files_router)
 app.include_router(chat_router)
 app.include_router(reports_router)
 app.include_router(monitoring_router)
+app.include_router(tasks_router)
 app.include_router(dashboard_router)
 app.include_router(websocket_router)

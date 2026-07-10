@@ -4,8 +4,8 @@ import type { UploadFile, UploadProps } from "antd";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
-import { askProject, completeFileBatch, completeMultipart, createFileBatch, createMonitoringUpdate, generateReport, getFileBatch, getMonitoringUpdates, getMultipartPartUrl, getProject, getProjectFiles, getReports, getUploadedParts, retryFile, uploadBatchFileContent, uploadMultipartPartContent } from "../api/services";
-import type { ChatResponse, MonitoringUpdate, Project, ProjectFile, Report } from "../types";
+import { askProject, completeFileBatch, completeMultipart, createFileBatch, createMonitoringUpdate, generateReport, getFileBatch, getMonitoringUpdates, getMultipartPartUrl, getProject, getProjectFiles, getProjectTasks, getReports, getUploadedParts, retryFile, updateProjectTask, uploadBatchFileContent, uploadMultipartPartContent } from "../api/services";
+import type { ChatResponse, MonitoringUpdate, Project, ProjectFile, ProjectTask, Report } from "../types";
 
 export function ProjectDetailPage() {
   const { projectId = "" } = useParams();
@@ -28,24 +28,22 @@ export function ProjectDetailPage() {
   const [chatting, setChatting] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [retryingFileId, setRetryingFileId] = useState<string | null>(null);
-  const [tasks, setTasks] = useState([
-    { id: "team", label: "补充核心团队履历与分工", done: false },
-    { id: "market", label: "确认市场规模与竞争格局假设", done: false },
-    { id: "finance", label: "复核最新一版财务预测", done: true },
-  ]);
+  const [tasks, setTasks] = useState<ProjectTask[]>([]);
 
   const load = async () => {
     try {
-      const [nextProject, nextFiles, nextReports, nextMonitoring] = await Promise.all([
+      const [nextProject, nextFiles, nextReports, nextMonitoring, nextTasks] = await Promise.all([
         getProject(projectId),
         getProjectFiles(projectId),
         getReports(projectId),
         getMonitoringUpdates(projectId),
+        getProjectTasks(projectId),
       ]);
       setProject(nextProject);
       setFiles(Array.isArray(nextFiles) ? nextFiles : []);
       setReports(Array.isArray(nextReports) ? nextReports : []);
       setMonitoring(Array.isArray(nextMonitoring) ? nextMonitoring : []);
+      setTasks(Array.isArray(nextTasks) ? nextTasks : []);
     } catch (error: any) {
       message.error(error?.response?.data?.detail ?? "无法加载项目详情");
     } finally {
@@ -244,12 +242,21 @@ export function ProjectDetailPage() {
   };
 
   const submitPreset = (value: string) => { setQuestion(value); void submitQuestion(); };
-  const toggleTask = (id: string) => setTasks((items) => items.map((item) => item.id === id ? { ...item, done: !item.done } : item));
+  const toggleTask = async (task: ProjectTask) => {
+    const nextDone = !task.done;
+    setTasks((items) => items.map((item) => item.id === task.id ? { ...item, done: nextDone } : item));
+    try {
+      await updateProjectTask(projectId, task.id, nextDone);
+    } catch (error: any) {
+      setTasks((items) => items.map((item) => item.id === task.id ? { ...item, done: task.done } : item));
+      message.error(error?.response?.data?.detail ?? "任务状态保存失败");
+    }
+  };
   const statusLabel = project ? ({ pre_investment: "投前", in_progress: "投中", post_investment: "投后", rejected: "已放弃", exited: "已退出" } as Record<string, string>)[project.investment_status] ?? project.stage : "投前";
   const overview = <div className="detail-stack"><Row gutter={[16, 16]}><Col xs={24} md={8}><Metric icon={<FileTextOutlined />} label="项目阶段" value={statusLabel} /></Col><Col xs={24} md={8}><Metric icon={<SafetyCertificateOutlined />} label="资料完整度" value={(files.length ? Math.round(files.filter((file) => file.parse_status === "completed").length / files.length * 100) : 0) + "%"} /></Col><Col xs={24} md={8}><Metric icon={<RobotOutlined />} label="AI 洞察" value={chatResult ? "已生成" : "待研究"} /></Col></Row><Card className="workspace-panel" title="项目摘要"><Descriptions column={{ xs: 1, md: 2 }} items={[{ key: "company", label: "公司", children: project?.company_name }, { key: "industry", label: "行业", children: project?.industry }, { key: "stage", label: "当前轮次", children: project?.stage }, { key: "status", label: "投资状态", children: statusLabel }]} /><Typography.Paragraph className="project-description">{project?.description || "还没有项目摘要。上传 BP 或补充项目介绍后,AI 会自动建立项目画像。"}</Typography.Paragraph></Card></div>;
   const materials = <div className="detail-stack"><Card className="workspace-panel material-upload" title="资料中心" extra={<Space><Upload {...uploadProps} disabled={submitting || resuming}><Button disabled={submitting || resuming}>选择文件</Button></Upload><Button type="primary" loading={submitting || resuming} disabled={!selectedFiles.length || submitting || resuming} onClick={() => void submitBatch()}>开始解析</Button></Space>}><Typography.Paragraph type="secondary">支持 BP、财报、合同、尽调报告、行业研究、新闻和图片扫描件。上传后会自动进入 OCR、表格提取和 AI 结构化流程。</Typography.Paragraph>{batchId && <div className="batch-progress"><Progress percent={batchProgress} status={batchProgress === 100 ? "success" : "active"} /><span>解析进度实时同步</span></div>}<List dataSource={files} locale={{ emptyText: "还没有项目资料" }} renderItem={(file) => <List.Item><List.Item.Meta avatar={<span className="file-type-icon"><FileTextOutlined /></span>} title={file.filename} description={file.parse_stage + " · " + file.content_type + (file.parse_error ? " · " + file.parse_error : "")} /><Space><Tag color={file.parse_status === "completed" ? "green" : file.parse_status === "failed" ? "red" : "gold"}>{file.parse_status}</Tag><Progress percent={file.progress} size="small" className="file-progress" />{file.parse_status === "failed" && <Button type="link" loading={retryingFileId === file.id} onClick={() => void retryParse(file.id)}>重试</Button>}</Space></List.Item>} /></Card></div>;
   const analysis = <div className="detail-stack"><Card className="workspace-panel analysis-panel" title="AI 分析" extra={<Tag color="cyan">基于项目资料</Tag>}><div className="preset-grid"><Button onClick={() => submitPreset("总结这家公司的核心投资亮点、商业模式和主要风险")}>投资亮点与风险 <ArrowRightOutlined /></Button><Button onClick={() => submitPreset("分析公司的市场空间、竞争格局和增长驱动")}>市场与竞争格局 <ArrowRightOutlined /></Button><Button onClick={() => submitPreset("从财务、团队和合规角度列出尽调问题")}>生成尽调问题清单 <ArrowRightOutlined /></Button></div><Input.TextArea rows={4} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="也可以直接问项目,例如:这家公司是否值得进入下一轮尽调?" /><Button type="primary" loading={chatting} disabled={!question.trim()} onClick={() => void submitQuestion()} className="analysis-submit">发起分析</Button>{chatResult && <div className="analysis-result"><span className="eyebrow">AI 研究结论</span><Typography.Paragraph>{chatResult.answer}</Typography.Paragraph><Typography.Title level={5}>引用资料</Typography.Title><List dataSource={chatResult.citations} renderItem={(citation) => <List.Item><List.Item.Meta title={citation.filename} description={citation.content} /></List.Item>} /></div>}</Card></div>;
-  const diligence = <div className="detail-stack"><Alert message="尽调清单会随着 AI 分析和资料解析结果持续更新" description="先完成关键资料上传,再按优先级推进待办事项。" type="info" showIcon /><Card className="workspace-panel" title="尽调与任务"><List dataSource={tasks} renderItem={(task) => <List.Item actions={[<Button type="link" onClick={() => toggleTask(task.id)}>{task.done ? "标记未完成" : "完成"}</Button>]}><List.Item.Meta avatar={task.done ? <CheckCircleOutlined className="task-complete" /> : <span className="task-number">!</span>} title={<span className={task.done ? "task-done" : ""}>{task.label}</span>} description={task.done ? "已完成" : "等待你的确认"} /></List.Item>} /></Card></div>;
+  const diligence = <div className="detail-stack"><Alert message="尽调清单会随着 AI 分析和资料解析结果持续更新" description="先完成关键资料上传,再按优先级推进待办事项。" type="info" showIcon /><Card className="workspace-panel" title="尽调与任务"><List dataSource={tasks} locale={{ emptyText: "暂无尽调任务" }} renderItem={(task) => <List.Item actions={[<Button type="link" onClick={() => void toggleTask(task)}>{task.done ? "标记未完成" : "完成"}</Button>]}><List.Item.Meta avatar={task.done ? <CheckCircleOutlined className="task-complete" /> : <span className="task-number">!</span>} title={<span className={task.done ? "task-done" : ""}>{task.label}</span>} description={task.done ? "已完成" : "等待你的确认"} /></List.Item>} /></Card></div>;
   const reportsPanel = <div className="detail-stack"><Card className="workspace-panel" title="报告与决策" extra={<Button type="primary" loading={generating} onClick={() => void submitReport()}>生成投研报告</Button>}><Typography.Paragraph type="secondary">将项目资料、AI 分析、风险和尽调问题汇总为一份可供决策会使用的报告。</Typography.Paragraph><List dataSource={reports} locale={{ emptyText: "暂时没有报告" }} renderItem={(report) => <List.Item><List.Item.Meta avatar={<span className="report-icon"><FileTextOutlined /></span>} title={report.title} description={report.content.slice(0, 280)} /><Button type="link" onClick={() => setReportPreview(report)}>查看报告</Button></List.Item>} /></Card></div>;
   const latestRisk = monitoring.find((item) => item.risk_level !== "normal");
   const monitoringPanel = <div className="detail-stack"><Row gutter={[16, 16]}><Col xs={24} md={8}><Metric label="监控记录" value={`${monitoring.length} 条`} /></Col><Col xs={24} md={8}><Metric label="本期风险" value={latestRisk ? (latestRisk.risk_level === "high" ? "高风险" : "需关注") : "正常"} /></Col><Col xs={24} md={8}><Metric label="最近更新" value={monitoring[0] ? new Date(monitoring[0].created_at).toLocaleDateString("zh-CN") : "暂无"} /></Col></Row><Card className="workspace-panel" title="投后监控" extra={<Button type="primary" onClick={() => setMonitoringOpen(true)}>新增监控记录</Button>}><List dataSource={monitoring} locale={{ emptyText: "还没有监控记录，请先录入经营指标或风险变化" }} renderItem={(item) => <List.Item><List.Item.Meta title={<Space><span>{item.metric_name}</span><Tag color={item.risk_level === "high" ? "red" : item.risk_level === "watch" ? "gold" : "green"}>{item.risk_level === "high" ? "高风险" : item.risk_level === "watch" ? "需关注" : "正常"}</Tag></Space>} description={`${item.metric_value}${item.metric_unit} · ${item.note || "暂无备注"}`} /><Typography.Text type="secondary">{new Date(item.created_at).toLocaleDateString("zh-CN")}</Typography.Text></List.Item>} /></Card></div>;

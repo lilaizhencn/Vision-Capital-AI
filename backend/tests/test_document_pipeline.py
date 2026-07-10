@@ -430,6 +430,22 @@ def test_monitoring_updates_are_persisted_and_owner_scoped(api_client) -> None:
     assert api_client.get(f"/api/projects/{project_id}/monitoring", headers={"Authorization": f"Bearer {other_token}"}).status_code == 404
 
 
+def test_project_tasks_are_persisted_and_owner_scoped(api_client) -> None:
+    token = api_client.post("/api/auth/register", json={"email": "tasks@example.com", "username": "tasks", "password": "strong-password"}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    project_id = api_client.post(
+        "/api/projects", headers=headers,
+        json={"name": "Tasks QA", "company_name": "Acme", "industry": "SaaS", "stage": "Seed"},
+    ).json()["id"]
+    listed = api_client.get(f"/api/projects/{project_id}/tasks", headers=headers)
+    assert listed.status_code == 200
+    assert len(listed.json()) == 3
+    task = listed.json()[0]
+    updated = api_client.patch(f"/api/projects/{project_id}/tasks/{task['id']}", headers=headers, json={"done": True})
+    assert updated.status_code == 200
+    assert updated.json()["done"] is True
+
+
 def test_chat_falls_back_to_recent_chunks_when_embeddings_are_unavailable(api_client, monkeypatch) -> None:
     monkeypatch.setattr(EmbeddingService, "embed_text", lambda _self, _text: (_ for _ in ()).throw(RuntimeError("embedding unavailable")))
     monkeypatch.setattr(LLMService, "generate", lambda _self, _prompt: "fallback response")
