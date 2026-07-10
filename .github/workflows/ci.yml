@@ -45,3 +45,52 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker compose config
+
+  compose-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Start the full stack
+        run: docker compose up -d --build
+      - name: Wait for the API and frontend
+        run: |
+          for attempt in $(seq 1 90); do
+            if curl --fail --silent http://localhost:8000/health >/dev/null && curl --fail --silent http://localhost:5173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 5
+          done
+          docker compose ps
+          exit 1
+      - name: Exercise auth, project, upload, and worker parsing
+        run: |
+          set -euo pipefail
+          email="ci-${GITHUB_RUN_ID}@example.com"
+          register=$(curl --fail --silent -X POST http://localhost:8000/api/auth/register -H 'Content-Type: application/json' -d "{\"email\":\"${email}\",\"username\":\"ci${GITHUB_RUN_ID}\",\"password\":\"Strong-password-123!\"}")
+          token=$(echo "$register" | jq -r .access_token)
+          project=$(curl --fail --silent -X POST http://localhost:8000/api/projects -H "Authorization: Bearer $token" -H 'Content-Type: application/json' -d '{"name":"CI Project","company_name":"CI Company","industry":"SaaS","stage":"Seed"}')
+          project_id=$(echo "$project" | jq -r .id)
+          printf 'Revenue grew 20 percent\n' > /tmp/vision-ci.txt
+          curl --fail --silent -X POST "http://localhost:8000/api/projects/$project_id/files/upload" -H "Authorization: Bearer $token" -F upload_file=@/tmp/vision-ci.txt
+          for attempt in $(seq 1 60); do
+            files=$(curl --fail --silent "http://localhost:8000/api/projects/$project_id/files" -H "Authorization: Bearer $token")
+            status=$(echo "$files" | jq -r '.[0].parse_status // "missing"')
+            if [ "$status" = "completed" ]; then
+              echo "$files" | jq -e '.[0].virus_scan_status == "clean" or .[0].virus_scan_status == "skipped"' >/dev/null
+              exit 0
+            fi
+            if [ "$status" = "failed" ]; then
+              echo "$files"
+              exit 1
+            fi
+            sleep 5
+          done
+          echo "$files"
+          exit 1
+      - name: Collect service logs
+        if: always()
+        run: docker compose logs --no-color
+      - name: Stop the full stack
+        if: always()
+        run: docker compose down -v
