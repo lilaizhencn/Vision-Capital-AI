@@ -123,7 +123,7 @@ jobs:
           test "$public_status" = "completed"
           pdf_text=$(docker compose exec -T backend python -c "from app.core.database import SessionLocal; from app.models.file import ProjectFile; db=SessionLocal(); f=db.get(ProjectFile, '$pdf_file_id'); print(f.parsed_text or ''); db.close()")
           echo "public PDF parsed chars: ${#pdf_text}"
-          echo "$pdf_text" | grep -qiE "UTF-8|PDF 2.0"
+          echo "$pdf_text" | grep -iE "UTF-8|PDF 2.0" >/dev/null
 
           curl --fail --silent --show-error --location https://raw.githubusercontent.com/PacktPublishing/Getting-Started-with-Tableau-2019.2/master/Chapter03/Sample-Superstore.xlsx -o /tmp/vision-public.xlsx
           test -s /tmp/vision-public.xlsx
@@ -139,7 +139,7 @@ jobs:
           test "$public_status" = "completed"
           xlsx_text=$(docker compose exec -T backend python -c "from app.core.database import SessionLocal; from app.models.file import ProjectFile; db=SessionLocal(); f=db.get(ProjectFile, '$xlsx_file_id'); print(f.parsed_text or ''); db.close()")
           echo "public Excel parsed chars: ${#xlsx_text}"
-          echo "$xlsx_text" | grep -qi "Orders"
+          echo "$xlsx_text" | grep -i "Orders" >/dev/null
 
           checksum=$(sha256sum /tmp/vision-ci.txt | awk '{print $1}')
           batch=$(curl --fail --silent -X POST "http://localhost:8000/api/projects/$project_id/file-batches" \
