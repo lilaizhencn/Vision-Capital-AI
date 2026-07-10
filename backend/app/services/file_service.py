@@ -27,7 +27,11 @@ class FileService:
         if not project:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
 
-        content = upload_file.file.read()
+        filename = upload_file.filename or ""
+        self._validate_filename(filename)
+        content = upload_file.file.read(settings.max_upload_size_bytes + 1)
+        if len(content) > settings.max_upload_size_bytes:
+            raise HTTPException(status_code=413, detail="File exceeds the upload size limit")
         object_key = f"{project_id}/{uuid.uuid4()}-{upload_file.filename}"
         content_type = upload_file.content_type or mimetypes.guess_type(upload_file.filename)[0] or "application/octet-stream"
         stored = self.storage.upload_file(object_key=object_key, content=content, content_type=content_type)
@@ -53,8 +57,10 @@ class FileService:
             raise HTTPException(status_code=404, detail="Project not found")
         if not request.files or len(request.files) > 100:
             raise HTTPException(status_code=400, detail="A batch must contain 1 to 100 files")
-        if any(item.size < 0 or item.size > settings.max_upload_size_bytes for item in request.files):
+        if any(item.size > settings.max_upload_size_bytes for item in request.files):
             raise HTTPException(status_code=413, detail="File exceeds the upload size limit")
+        for item in request.files:
+            self._validate_filename(item.filename)
         batch = DocumentBatch(project_id=project_id, total_files=len(request.files), status=BatchStatus.uploading)
         self.db.add(batch)
         self.db.flush()
@@ -86,6 +92,11 @@ class FileService:
         if not batch or not self.project_repo.get_for_owner(batch.project_id, user.id):
             raise HTTPException(status_code=404, detail="Batch not found")
         files = list(self.db.query(ProjectFile).filter(ProjectFile.batch_id == batch.id).all())
+        if batch.status != BatchStatus.uploading:
+            return BatchRead.model_validate({"id": batch.id, "project_id": batch.project_id,
+                "total_files": batch.total_files, "completed_files": batch.completed_files,
+                "failed_files": batch.failed_files, "progress": batch.progress, "status": batch.status,
+                "files": files, "upload_sessions": []})
         batch.status = BatchStatus.queued
         self.db.commit()
         for file in files:
@@ -98,7 +109,8 @@ class FileService:
                 file.parse_status = ParseStatus.pending
                 file.parse_stage = ParseStage.validate
                 file.progress = 10
-                parse_uploaded_file_task.delay(file.id)
+                if file.parse_status != ParseStatus.processing:
+                    parse_uploaded_file_task.delay(file.id)
         self.db.commit()
         return BatchRead.model_validate({"id": batch.id, "project_id": batch.project_id,
             "total_files": batch.total_files, "completed_files": batch.completed_files,
@@ -122,6 +134,8 @@ class FileService:
             raise HTTPException(status_code=404, detail="File not found")
         if file.parse_status != ParseStatus.failed:
             raise HTTPException(status_code=409, detail="Only failed files can be retried")
+        if file.retry_count >= settings.max_parse_retries:
+            raise HTTPException(status_code=409, detail="Maximum parse retries exceeded")
         file.parse_status = ParseStatus.pending
         file.parse_stage = ParseStage.validate
         file.progress = 10
@@ -129,3 +143,10 @@ class FileService:
         self.db.commit()
         parse_uploaded_file_task.delay(file.id)
         return file
+
+    @staticmethod
+    def _validate_filename(filename: str) -> None:
+        allowed = {"pdf", "docx", "xlsx", "xls", "csv", "txt", "md", "png", "jpg", "jpeg", "webp"}
+        suffix = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
+        if not filename.strip() or suffix not in allowed:
+            raise HTTPException(status_code=415, detail="Unsupported or missing file extension")

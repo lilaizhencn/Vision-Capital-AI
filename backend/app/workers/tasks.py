@@ -1,5 +1,8 @@
+import hashlib
+
 from app.ai.embedding_service import EmbeddingService
 from app.core.database import SessionLocal
+from app.core.config import settings
 from app.models.chunk import DocumentChunk
 from app.models.file import ParseStatus
 from app.models.file import BatchStatus, ParseStage
@@ -18,7 +21,7 @@ from openai import APIConnectionError, RateLimitError
     autoretry_for=(ConnectionError, TimeoutError, EndpointConnectionError, ReadTimeoutError, APIConnectionError, RateLimitError),
     retry_backoff=True,
     retry_backoff_max=120,
-    retry_kwargs={"max_retries": 3},
+    retry_kwargs={"max_retries": settings.max_parse_retries},
 )
 def parse_uploaded_file_task(file_id: str) -> None:
     db = SessionLocal()
@@ -32,6 +35,8 @@ def parse_uploaded_file_task(file_id: str) -> None:
         file = file_repo.get(file_id)
         if not file:
             return
+        if file.parse_status == ParseStatus.completed:
+            return
 
         file.parse_status = ParseStatus.processing
         file.parse_stage = ParseStage.validate
@@ -41,6 +46,7 @@ def parse_uploaded_file_task(file_id: str) -> None:
 
         # 这里串起上传后最关键的数据管道：下载、解析、切片、向量化、入库。
         data = storage.download_file(file.r2_object_key)
+        file.checksum_sha256 = hashlib.sha256(data).hexdigest()
         file.parse_stage = ParseStage.ocr
         file.progress = 35
         db.commit()

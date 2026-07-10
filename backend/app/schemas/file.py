@@ -32,9 +32,9 @@ class FileUploadResponse(BaseModel):
 
 
 class BatchFileRequest(BaseModel):
-    filename: str
-    size: int
-    content_type: str = "application/octet-stream"
+    filename: str = Field(min_length=1, max_length=255)
+    size: int = Field(ge=0)
+    content_type: str = Field(default="application/octet-stream", max_length=150)
 
 
 class BatchCreateRequest(BaseModel):
@@ -69,4 +69,4 @@ class MultipartPart(BaseModel):
 
 
 class MultipartCompleteRequest(BaseModel):
-    parts: list[MultipartPart]
+    parts: list[MultipartPart] = Field(min_length=1)

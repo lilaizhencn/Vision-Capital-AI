@@ -18,6 +18,7 @@ from app.core.config import settings
 from app.workers import tasks
 from app.services import file_service
 from app.api import websocket as websocket_api
+from app.services.file_service import FileService
 
 
 class FakeOCR:
@@ -53,6 +54,14 @@ def test_parser_delegates_images_to_ocr() -> None:
     result = DocumentParserService(ocr_service=FakeOCR()).parse("scan.png", "image/png", b"image-bytes")
 
     assert result == "OCR result"
+
+
+def test_file_validation_rejects_unsupported_extensions() -> None:
+    with pytest.raises(Exception):
+        FileService._validate_filename("payload.exe")
+
+    with pytest.raises(Exception):
+        FileService._validate_filename("no-extension")
 
 
 def test_chunking_overlaps_and_estimates_tokens() -> None:
@@ -133,6 +142,21 @@ def test_auth_project_upload_and_parse_flow(api_client) -> None:
     assert listed.json()[0]["progress"] == 100
 
 
+def test_single_upload_enforces_maximum_size(api_client, monkeypatch) -> None:
+    token = api_client.post("/api/auth/register", json={"email": "size@example.com", "username": "size", "password": "strong-password"}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    project_id = api_client.post("/api/projects", headers=headers, json={"name": "Size QA", "company_name": "Acme", "industry": "SaaS", "stage": "Seed"}).json()["id"]
+    monkeypatch.setattr(settings, "max_upload_size_bytes", 3)
+
+    response = api_client.post(
+        f"/api/projects/{project_id}/files/upload",
+        headers=headers,
+        files={"upload_file": ("memo.txt", b"four", "text/plain")},
+    )
+
+    assert response.status_code == 413
+
+
 def test_batch_upload_complete_and_parse_flow(api_client) -> None:
     token = api_client.post("/api/auth/register", json={"email": "batch@example.com", "username": "batch", "password": "strong-password"}).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -156,3 +180,6 @@ def test_batch_upload_complete_and_parse_flow(api_client) -> None:
     files = api_client.get(f"/api/projects/{project_id}/files", headers=headers).json()
     assert files[0]["parse_status"] == "completed"
     assert files[0]["batch_id"] == batch["id"]
+    repeated = api_client.post(f"/api/file-batches/{batch['id']}/complete", headers=headers)
+    assert repeated.status_code == 200
+    assert repeated.json()["status"] == "completed"

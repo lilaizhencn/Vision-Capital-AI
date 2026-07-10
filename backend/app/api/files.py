@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from math import ceil
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.config import settings
 from app.core.deps import get_current_user
 from app.models.file import DocumentBatch, ParseStage
 from app.models.user import User
@@ -48,6 +50,9 @@ def sign_multipart_part(batch_id: str, file_id: str, part_number: int, db: Sessi
         raise HTTPException(status_code=404, detail="Batch file not found")
     if not file.multipart_upload_id or not hasattr(FileService(db).storage, "presign_upload_part"):
         raise HTTPException(status_code=400, detail="Multipart upload is not available")
+    total_parts = ceil(file.size / settings.upload_part_size_bytes)
+    if part_number < 1 or part_number > total_parts:
+        raise HTTPException(status_code=400, detail="Invalid multipart part number")
     return {"url": FileService(db).storage.presign_upload_part(file.r2_object_key, file.multipart_upload_id, part_number)}
 
 
@@ -72,6 +77,12 @@ def complete_multipart(batch_id: str, file_id: str, payload: MultipartCompleteRe
     storage = FileService(db).storage
     if not file.multipart_upload_id or not hasattr(storage, "complete_multipart"):
         raise HTTPException(status_code=400, detail="Multipart upload is not available")
+    total_parts = ceil(file.size / settings.upload_part_size_bytes)
+    numbers = [part.part_number for part in payload.parts]
+    if sorted(numbers) != list(range(1, total_parts + 1)):
+        raise HTTPException(status_code=400, detail="All multipart parts are required exactly once")
+    if any(not part.etag.strip() for part in payload.parts):
+        raise HTTPException(status_code=400, detail="Every multipart part must include an ETag")
     storage.complete_multipart(file.r2_object_key, file.multipart_upload_id, [{"PartNumber": p.part_number, "ETag": p.etag} for p in payload.parts])
     file.parse_stage = ParseStage.validate
     file.progress = 10
