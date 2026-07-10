@@ -10,6 +10,11 @@ from app.services.report_service import ReportService
 router = APIRouter(tags=["reports"])
 
 
+@router.get("/api/reports", response_model=list[ReportRead])
+def list_recent_reports(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    return ReportService(db).list_recent(user.id)
+
+
 @router.post("/api/projects/{project_id}/reports/generate", response_model=ReportRead)
 def generate_report(project_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     return ReportService(db).generate(project_id, user.id)

@@ -45,3 +45,6 @@ class ReportService:
     def list(self, project_id: str, owner_id: str):
         self._ensure_project(project_id, owner_id)
         return self.report_repo.list_for_project(project_id)
+
+    def list_recent(self, owner_id: str):
+        return self.report_repo.recent_for_owner(owner_id)

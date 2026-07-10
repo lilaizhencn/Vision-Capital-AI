@@ -266,6 +266,17 @@ def test_project_dashboard_chat_and_report_flow(api_client, monkeypatch) -> None
     listed_reports = api_client.get(f"/api/projects/{project_id}/reports", headers=headers)
     assert listed_reports.status_code == 200
     assert len(listed_reports.json()) == 1
+    recent_reports = api_client.get("/api/reports", headers=headers)
+    assert recent_reports.status_code == 200
+    assert len(recent_reports.json()) == 1
+
+    other_token = api_client.post(
+        "/api/auth/register",
+        json={"email": "other-business@example.com", "username": "other-business", "password": "strong-password"},
+    ).json()["access_token"]
+    other_headers = {"Authorization": f"Bearer {other_token}"}
+    assert api_client.get("/api/reports", headers=other_headers).json() == []
+    assert api_client.get(f"/api/projects/{project_id}/reports", headers=other_headers).status_code == 404
 
     assert api_client.delete(f"/api/projects/{project_id}", headers=headers).status_code == 200
     assert api_client.get(f"/api/projects/{project_id}", headers=headers).status_code == 404

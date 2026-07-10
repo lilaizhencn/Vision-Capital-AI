@@ -56,6 +56,9 @@ class LocalStorageService:
         path = self.base_path / object_key
         return path.exists() and (expected_size is None or path.stat().st_size == expected_size)
 
+    def upload_part(self, object_key: str, upload_id: str | None, part_number: int, content: bytes) -> str:
+        raise RuntimeError("Multipart upload is unavailable for local storage")
+
 
 class R2StorageService:
     def __init__(self) -> None:
@@ -123,6 +126,16 @@ class R2StorageService:
             Bucket=self.bucket, Key=object_key, UploadId=upload_id,
             MultipartUpload={"Parts": parts},
         )
+
+    def upload_part(self, object_key: str, upload_id: str, part_number: int, content: bytes) -> str:
+        response = self.client.upload_part(
+            Bucket=self.bucket,
+            Key=object_key,
+            UploadId=upload_id,
+            PartNumber=part_number,
+            Body=content,
+        )
+        return response["ETag"].strip('"')
 
     def list_multipart_parts(self, object_key: str, upload_id: str) -> list[dict]:
         parts: list[dict] = []

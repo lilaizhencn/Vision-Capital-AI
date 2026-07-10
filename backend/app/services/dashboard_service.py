@@ -50,6 +50,5 @@ class DashboardService:
             total_files=total_files,
             completed_files=completed_files,
             recent_projects=[ProjectRead.model_validate(project) for project in recent_projects],
-            recent_reports=[ReportRead.model_validate(report) for report in self.report_repo.recent()],
+            recent_reports=[ReportRead.model_validate(report) for report in self.report_repo.recent_for_owner(owner_id, limit=5)],
         )
-

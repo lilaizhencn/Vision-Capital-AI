@@ -1,4 +1,4 @@
-import { Card, Col, List, Row, Typography } from "antd";
+import { Alert, Card, Col, List, Row, Typography, message } from "antd";
 import { useEffect, useState } from "react";
 
 import { getDashboardSummary } from "../api/services";
@@ -9,7 +9,7 @@ export function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
 
   useEffect(() => {
-    void getDashboardSummary().then(setSummary);
+    void getDashboardSummary().then(setSummary).catch((reason: any) => message.error(reason?.response?.data?.detail ?? "无法加载 Dashboard"));
   }, []);
 
   return (
@@ -20,6 +20,7 @@ export function DashboardPage() {
           从项目、文档、知识片段到 AI 洞察，把投前、投中、投后的研究信息放进同一个面板。
         </Typography.Paragraph>
       </div>
+      {!summary && <Alert type="info" showIcon message="正在加载投资组合数据" />}
       <Row gutter={[16, 16]}>
         <Col span={6}><StatCard title="项目总数" value={summary?.total_projects ?? 0} /></Col>
         <Col span={6}><StatCard title="投前项目" value={summary?.pre_investment_projects ?? 0} /></Col>
@@ -55,4 +56,3 @@ export function DashboardPage() {
     </div>
   );
 }
-

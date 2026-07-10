@@ -84,6 +84,13 @@ export async function getUploadedParts(batchId: string, fileId: string) {
   return data.parts;
 }
 
+export async function uploadMultipartPartContent(batchId: string, fileId: string, partNumber: number, file: Blob) {
+  const formData = new FormData();
+  formData.append("upload_file", file, `part-${partNumber}`);
+  const { data } = await client.post<{ part_number: number; etag: string }>(`/api/file-batches/${batchId}/files/${fileId}/parts/${partNumber}/content`, formData);
+  return data;
+}
+
 export async function completeMultipart(batchId: string, fileId: string, parts: Array<{ part_number: number; etag: string }>) {
   await client.post(`/api/file-batches/${batchId}/files/${fileId}/complete-multipart`, { parts });
 }
@@ -105,5 +112,10 @@ export async function getReports(projectId: string) {
 
 export async function generateReport(projectId: string) {
   const { data } = await client.post<Report>(`/api/projects/${projectId}/reports/generate`);
+  return data;
+}
+
+export async function getRecentReports() {
+  const { data } = await client.get<Report[]>("/api/reports");
   return data;
 }

@@ -9,7 +9,7 @@ from app.models.file import DocumentBatch, ParseStage
 from app.models.user import User
 from app.repositories.file_repository import FileRepository
 from app.repositories.project_repository import ProjectRepository
-from app.schemas.file import BatchCreateRequest, BatchRead, FileRead, FileUploadResponse, MultipartCompleteRequest
+from app.schemas.file import BatchCreateRequest, BatchRead, FileRead, FileUploadResponse, MultipartCompleteRequest, MultipartPart
 from app.services.file_service import FileService
 
 router = APIRouter(tags=["files"])
@@ -66,6 +66,33 @@ def list_multipart_parts(batch_id: str, file_id: str, db: Session = Depends(get_
     if not file.multipart_upload_id or not hasattr(storage, "list_multipart_parts"):
         return {"parts": []}
     return {"parts": storage.list_multipart_parts(file.r2_object_key, file.multipart_upload_id)}
+
+
+@router.post("/api/file-batches/{batch_id}/files/{file_id}/parts/{part_number}/content", response_model=MultipartPart)
+def upload_multipart_part_content(
+    batch_id: str,
+    file_id: str,
+    part_number: int,
+    upload_file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    file = FileRepository(db).get(file_id)
+    batch = db.get(DocumentBatch, batch_id)
+    storage = FileService(db).storage
+    if not batch or not file or file.batch_id != batch_id or not ProjectRepository(db).get_for_owner(batch.project_id, user.id):
+        raise HTTPException(status_code=404, detail="Batch file not found")
+    if not file.multipart_upload_id or not hasattr(storage, "upload_part"):
+        raise HTTPException(status_code=400, detail="Multipart upload is not available")
+    total_parts = ceil(file.size / settings.upload_part_size_bytes)
+    if part_number < 1 or part_number > total_parts:
+        raise HTTPException(status_code=400, detail="Invalid multipart part number")
+    content = upload_file.file.read(settings.upload_part_size_bytes + 1)
+    expected_size = min(settings.upload_part_size_bytes, file.size - (part_number - 1) * settings.upload_part_size_bytes)
+    if len(content) != expected_size:
+        raise HTTPException(status_code=400, detail="Uploaded part size does not match the declared size")
+    etag = storage.upload_part(file.r2_object_key, file.multipart_upload_id, part_number, content)
+    return MultipartPart(part_number=part_number, etag=etag)
 
 
 @router.post("/api/file-batches/{batch_id}/files/{file_id}/complete-multipart")

@@ -37,6 +37,7 @@
 
 ## Reports
 
+- `GET /api/reports` lists the current user's most recent reports for the report center.
 - `POST /api/projects/{project_id}/reports/generate`
 - `GET /api/projects/{project_id}/reports`
 

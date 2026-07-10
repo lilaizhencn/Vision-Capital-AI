@@ -117,6 +117,8 @@ celery -A app.workers.celery_app.celery_app worker --loglevel=info
 
 系统默认优先使用 Cloudflare R2。如果 `R2_*` 环境变量没有配置，后端会自动回退到 `LOCAL_STORAGE_PATH` 本地目录，方便本地学习与开发。
 
+浏览器直传使用 R2 presigned PUT / multipart URL。R2 bucket 需要允许实际前端来源的 `PUT`、`POST`、`GET`、`HEAD`、`DELETE`，并在 CORS `ExposeHeaders` 中暴露 `ETag`。如果 bucket 权限暂时不能配置 CORS，前端会在直传失败时自动切换到受 JWT 保护的后端分片兜底路径，文件仍然写入 R2。
+
 ## OpenAI / DeepSeek 配置说明
 
 - `LLM_BASE_URL` 可指向 OpenAI 官方地址，也可指向 DeepSeek 或其他 OpenAI-compatible 服务。
