@@ -6,6 +6,7 @@ import fitz
 from types import SimpleNamespace
 from docx import Document
 from app.ai.llm_service import LLMService
+from app.services.rag_service import RAGService
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -226,3 +227,45 @@ def test_batch_upload_complete_and_parse_flow(api_client) -> None:
     repeated = api_client.post(f"/api/file-batches/{batch['id']}/complete", headers=headers)
     assert repeated.status_code == 200
     assert repeated.json()["status"] == "completed"
+
+
+def test_project_dashboard_chat_and_report_flow(api_client, monkeypatch) -> None:
+    monkeypatch.setattr(RAGService, "similarity_search", lambda _self, *_args, **_kwargs: [])
+    monkeypatch.setattr(LLMService, "generate", lambda _self, _prompt: "stub AI response")
+    token = api_client.post("/api/auth/register", json={"email": "business@example.com", "username": "business", "password": "strong-password"}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+
+    created = api_client.post(
+        "/api/projects",
+        headers=headers,
+        json={"name": "Business QA", "company_name": "Acme", "industry": "SaaS", "stage": "Seed"},
+    )
+    assert created.status_code == 200
+    project_id = created.json()["id"]
+
+    updated = api_client.put(
+        f"/api/projects/{project_id}",
+        headers=headers,
+        json={"name": "Business QA Updated", "company_name": "Acme", "industry": "SaaS", "stage": "Series A", "description": "Updated"},
+    )
+    assert updated.status_code == 200
+    assert updated.json()["stage"] == "Series A"
+    assert api_client.get("/api/projects", headers=headers).json()[0]["name"] == "Business QA Updated"
+
+    dashboard = api_client.get("/api/dashboard/summary", headers=headers)
+    assert dashboard.status_code == 200
+    assert dashboard.json()["total_projects"] == 1
+
+    chat = api_client.post(f"/api/projects/{project_id}/chat", headers=headers, json={"message": "Summarize the project"})
+    assert chat.status_code == 200
+    assert chat.json() == {"answer": "stub AI response", "citations": []}
+
+    generated = api_client.post(f"/api/projects/{project_id}/reports/generate", headers=headers)
+    assert generated.status_code == 200
+    assert generated.json()["content"] == "stub AI response"
+    listed_reports = api_client.get(f"/api/projects/{project_id}/reports", headers=headers)
+    assert listed_reports.status_code == 200
+    assert len(listed_reports.json()) == 1
+
+    assert api_client.delete(f"/api/projects/{project_id}", headers=headers).status_code == 200
+    assert api_client.get(f"/api/projects/{project_id}", headers=headers).status_code == 404
