@@ -28,6 +28,7 @@ export interface Project {
 export interface ProjectFile {
   id: string;
   project_id: string;
+  batch_id?: string | null;
   filename: string;
   content_type: string;
   size: number;
@@ -35,7 +36,34 @@ export interface ProjectFile {
   r2_object_key: string;
   parse_status: string;
   parse_error?: string | null;
+  parse_stage: string;
+  progress: number;
+  retry_count: number;
+  checksum_sha256?: string | null;
+  multipart_upload_id?: string | null;
   created_at: string;
+}
+
+export interface UploadSession {
+  file_id: string;
+  object_key: string;
+  upload_url?: string | null;
+  upload_mode: "direct" | "multipart" | "backend";
+  part_size?: number | null;
+  total_parts?: number | null;
+  upload_id?: string | null;
+}
+
+export interface FileBatch {
+  id: string;
+  project_id: string;
+  total_files: number;
+  completed_files: number;
+  failed_files: number;
+  progress: number;
+  status: string;
+  files: ProjectFile[];
+  upload_sessions: UploadSession[];
 }
 
 export interface Citation {
@@ -67,4 +95,3 @@ export interface DashboardSummary {
   recent_projects: Project[];
   recent_reports: Report[];
 }
-

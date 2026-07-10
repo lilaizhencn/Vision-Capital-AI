@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     r2_secret_access_key: str | None = None
     r2_bucket_name: str | None = None
     r2_public_base_url: str | None = None
+    r2_presigned_url_expiry_seconds: int = 900
+    upload_multipart_threshold_bytes: int = 10 * 1024 * 1024
+    upload_part_size_bytes: int = 8 * 1024 * 1024
+    max_upload_size_bytes: int = 1024 * 1024 * 1024
+    max_parse_retries: int = 3
 
     llm_base_url: str = "https://api.openai.com/v1"
     llm_api_key: str | None = None
@@ -60,4 +65,3 @@ def get_settings() -> Settings:
 
 
 settings = get_settings()
-

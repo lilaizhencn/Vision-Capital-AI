@@ -7,6 +7,7 @@ from app.api.dashboard import router as dashboard_router
 from app.api.files import router as files_router
 from app.api.projects import router as projects_router
 from app.api.reports import router as reports_router
+from app.api.websocket import router as websocket_router
 from app.core.config import settings
 from app.core.database import Base, engine
 from app.models import *  # noqa: F401,F403
@@ -38,4 +39,4 @@ app.include_router(files_router)
 app.include_router(chat_router)
 app.include_router(reports_router)
 app.include_router(dashboard_router)
-
+app.include_router(websocket_router)

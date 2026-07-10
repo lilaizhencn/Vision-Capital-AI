@@ -3,13 +3,68 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
+from app.models.file import DocumentBatch, ParseStage
 from app.models.user import User
 from app.repositories.file_repository import FileRepository
 from app.repositories.project_repository import ProjectRepository
-from app.schemas.file import FileRead, FileUploadResponse
+from app.schemas.file import BatchCreateRequest, BatchRead, FileRead, FileUploadResponse, MultipartCompleteRequest
 from app.services.file_service import FileService
 
 router = APIRouter(tags=["files"])
+
+
+@router.post("/api/projects/{project_id}/file-batches", response_model=BatchRead)
+def create_file_batch(project_id: str, payload: BatchCreateRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    return FileService(db).create_batch(project_id, user, payload)
+
+
+@router.post("/api/file-batches/{batch_id}/complete", response_model=BatchRead)
+def complete_file_batch(batch_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    return FileService(db).complete_batch(batch_id, user)
+
+
+@router.post("/api/file-batches/{batch_id}/files/{file_id}/content", response_model=FileRead)
+def upload_batch_file_content(batch_id: str, file_id: str, upload_file: UploadFile = File(...), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    service = FileService(db)
+    batch = db.get(DocumentBatch, batch_id)
+    file = FileRepository(db).get(file_id)
+    if not batch or not file or file.batch_id != batch_id or not ProjectRepository(db).get_for_owner(batch.project_id, user.id):
+        raise HTTPException(status_code=404, detail="Batch file not found")
+    content = upload_file.file.read()
+    if len(content) != file.size:
+        raise HTTPException(status_code=400, detail="Uploaded size does not match the declared size")
+    service.storage.upload_file(file.r2_object_key, content, upload_file.content_type)
+    file.parse_stage = ParseStage.validate
+    file.progress = 10
+    db.commit()
+    return file
+
+
+@router.get("/api/file-batches/{batch_id}/files/{file_id}/parts/{part_number}/url")
+def sign_multipart_part(batch_id: str, file_id: str, part_number: int, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    file = FileRepository(db).get(file_id)
+    batch = db.get(DocumentBatch, batch_id)
+    if not batch or not file or file.batch_id != batch_id or not ProjectRepository(db).get_for_owner(batch.project_id, user.id):
+        raise HTTPException(status_code=404, detail="Batch file not found")
+    if not file.multipart_upload_id or not hasattr(FileService(db).storage, "presign_upload_part"):
+        raise HTTPException(status_code=400, detail="Multipart upload is not available")
+    return {"url": FileService(db).storage.presign_upload_part(file.r2_object_key, file.multipart_upload_id, part_number)}
+
+
+@router.post("/api/file-batches/{batch_id}/files/{file_id}/complete-multipart")
+def complete_multipart(batch_id: str, file_id: str, payload: MultipartCompleteRequest, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    file = FileRepository(db).get(file_id)
+    batch = db.get(DocumentBatch, batch_id)
+    if not batch or not file or file.batch_id != batch_id or not ProjectRepository(db).get_for_owner(batch.project_id, user.id):
+        raise HTTPException(status_code=404, detail="Batch file not found")
+    storage = FileService(db).storage
+    if not file.multipart_upload_id or not hasattr(storage, "complete_multipart"):
+        raise HTTPException(status_code=400, detail="Multipart upload is not available")
+    storage.complete_multipart(file.r2_object_key, file.multipart_upload_id, [{"PartNumber": p.part_number, "ETag": p.etag} for p in payload.parts])
+    file.parse_stage = ParseStage.validate
+    file.progress = 10
+    db.commit()
+    return file
 
 
 @router.post("/api/projects/{project_id}/files/upload", response_model=FileUploadResponse)

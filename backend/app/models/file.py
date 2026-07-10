@@ -15,11 +15,44 @@ class ParseStatus(str, enum.Enum):
     failed = "failed"
 
 
+class ParseStage(str, enum.Enum):
+    upload = "upload"
+    validate = "validate"
+    ocr = "ocr"
+    table_extract = "table_extract"
+    llm_extract = "llm_extract"
+    persist = "persist"
+    completed = "completed"
+
+
+class BatchStatus(str, enum.Enum):
+    uploading = "uploading"
+    queued = "queued"
+    processing = "processing"
+    completed = "completed"
+    failed = "failed"
+
+
+class DocumentBatch(Base):
+    __tablename__ = "document_batches"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    total_files: Mapped[int] = mapped_column(Integer, default=0)
+    completed_files: Mapped[int] = mapped_column(Integer, default=0)
+    failed_files: Mapped[int] = mapped_column(Integer, default=0)
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[BatchStatus] = mapped_column(Enum(BatchStatus, name="batch_status"), default=BatchStatus.uploading)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    project = relationship("Project")
+
+
 class ProjectFile(Base):
     __tablename__ = "project_files"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id", ondelete="CASCADE"), index=True)
+    batch_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("document_batches.id", ondelete="SET NULL"), index=True, nullable=True)
     filename: Mapped[str] = mapped_column(String(255))
     content_type: Mapped[str] = mapped_column(String(150))
     size: Mapped[int] = mapped_column(Integer)
@@ -31,7 +64,12 @@ class ProjectFile(Base):
         nullable=False,
     )
     parse_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    parse_stage: Mapped[ParseStage] = mapped_column(Enum(ParseStage, name="parse_stage"), default=ParseStage.upload)
+    progress: Mapped[int] = mapped_column(Integer, default=0)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    checksum_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    multipart_upload_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     project = relationship("Project", back_populates="files")
-
+    batch = relationship("DocumentBatch")

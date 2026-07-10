@@ -1,9 +1,9 @@
-import { Button, Card, Col, Input, List, Row, Tabs, Typography, Upload, message } from "antd";
-import type { UploadProps } from "antd";
+import { Button, Card, Col, Input, List, Progress, Row, Tabs, Typography, Upload, message } from "antd";
+import type { UploadFile, UploadProps } from "antd";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
-import { askProject, generateReport, getProject, getProjectFiles, getReports, uploadProjectFile } from "../api/services";
+import { askProject, completeFileBatch, completeMultipart, createFileBatch, generateReport, getMultipartPartUrl, getProject, getProjectFiles, getReports, uploadBatchFileContent } from "../api/services";
 import type { ChatResponse, Project, ProjectFile, Report } from "../types";
 
 export function ProjectDetailPage() {
@@ -13,6 +13,9 @@ export function ProjectDetailPage() {
   const [reports, setReports] = useState<Report[]>([]);
   const [question, setQuestion] = useState("");
   const [chatResult, setChatResult] = useState<ChatResponse | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<UploadFile[]>([]);
+  const [batchId, setBatchId] = useState<string | null>(null);
+  const [batchProgress, setBatchProgress] = useState(0);
 
   const load = async () => {
     setProject(await getProject(projectId));
@@ -20,116 +23,77 @@ export function ProjectDetailPage() {
     setReports(await getReports(projectId));
   };
 
+  useEffect(() => { void load(); }, [projectId]);
+
   useEffect(() => {
-    void load();
-  }, [projectId]);
+    if (!batchId) return;
+    const token = localStorage.getItem("vision_capital_ai_token");
+    const base = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000").replace(/^http/, "ws");
+    const socket = new WebSocket(`${base}/api/ws/batches/${batchId}?token=${encodeURIComponent(token ?? "")}`);
+    socket.onmessage = (event) => {
+      const payload = JSON.parse(event.data) as { progress: number; status: string };
+      setBatchProgress(payload.progress);
+      if (payload.status === "completed" || payload.status === "failed") void load();
+    };
+    socket.onerror = () => message.warning("实时进度连接中断，页面仍会刷新获取状态");
+    return () => socket.close();
+  }, [batchId]);
 
   const uploadProps: UploadProps = {
-    customRequest: async ({ file, onSuccess, onError }) => {
-      try {
-        await uploadProjectFile(projectId, file as File);
-        message.success("文件已上传");
-        await load();
-        onSuccess?.({}, new XMLHttpRequest());
-      } catch (error) {
-        onError?.(error as Error);
+    multiple: true,
+    beforeUpload: () => false,
+    fileList: selectedFiles,
+    onChange: ({ fileList }) => setSelectedFiles(fileList),
+    showUploadList: true,
+  };
+
+  const submitBatch = async () => {
+    const localFiles = selectedFiles.map((item) => item.originFileObj).filter(Boolean) as File[];
+    if (!localFiles.length) return;
+    try {
+      const batch = await createFileBatch(projectId, localFiles);
+      setBatchId(batch.id);
+      for (let index = 0; index < localFiles.length; index += 1) {
+        const localFile = localFiles[index];
+        const session = batch.upload_sessions[index];
+        if (!session || !localFile) throw new Error("上传会话与文件数量不一致");
+        if (session.upload_mode === "direct" && session.upload_url) {
+          const response = await fetch(session.upload_url, { method: "PUT", body: localFile, headers: { "Content-Type": localFile.type || "application/octet-stream" } });
+          if (!response.ok) throw new Error(`直传失败: ${localFile.name}`);
+        } else if (session.upload_mode === "multipart" && session.part_size) {
+          const parts: Array<{ part_number: number; etag: string }> = [];
+          for (let offset = 0, partNumber = 1; offset < localFile.size; offset += session.part_size, partNumber += 1) {
+            const url = await getMultipartPartUrl(batch.id, session.file_id, partNumber);
+            const response = await fetch(url, { method: "PUT", body: localFile.slice(offset, offset + session.part_size) });
+            if (!response.ok) throw new Error(`分片上传失败: ${localFile.name}`);
+            parts.push({ part_number: partNumber, etag: response.headers.get("ETag")?.replace(/"/g, "") ?? "" });
+          }
+          await completeMultipart(batch.id, session.file_id, parts);
+        } else {
+          await uploadBatchFileContent(batch.id, session.file_id, localFile);
+        }
       }
-    },
-    showUploadList: false,
+      await completeFileBatch(batch.id);
+      setSelectedFiles([]);
+      message.success("批次已提交，解析正在后台进行");
+      await load();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "批量上传失败");
+    }
   };
 
   return (
     <div className="page-stack">
-      <Card className="glass-card">
-        <Typography.Title level={2}>{project?.name}</Typography.Title>
-        <Typography.Paragraph>{project?.description}</Typography.Paragraph>
-      </Card>
-      <Tabs
-        items={[
-          {
-            key: "overview",
-            label: "项目概览",
-            children: (
-              <Row gutter={[16, 16]}>
-                <Col span={8}><Card className="glass-card" title="公司">{project?.company_name}</Card></Col>
-                <Col span={8}><Card className="glass-card" title="行业">{project?.industry}</Card></Col>
-                <Col span={8}><Card className="glass-card" title="阶段">{project?.stage}</Card></Col>
-              </Row>
-            ),
-          },
-          {
-            key: "files",
-            label: "文档资料",
-            children: (
-              <Card className="glass-card" extra={<Upload {...uploadProps}><Button type="primary">上传文件</Button></Upload>}>
-                <List
-                  dataSource={files}
-                  renderItem={(file) => (
-                    <List.Item>
-                      <List.Item.Meta title={file.filename} description={`${file.parse_status} · ${file.content_type}`} />
-                    </List.Item>
-                  )}
-                />
-              </Card>
-            ),
-          },
-          {
-            key: "chat",
-            label: "AI 问答",
-            children: (
-              <Card className="glass-card">
-                <Input.TextArea rows={4} value={question} onChange={(event) => setQuestion(event.target.value)} />
-                <Button
-                  type="primary"
-                  style={{ marginTop: 12 }}
-                  onClick={async () => setChatResult(await askProject(projectId, question))}
-                >
-                  发起分析
-                </Button>
-                {chatResult && (
-                  <div style={{ marginTop: 16 }}>
-                    <Typography.Title level={4}>回答</Typography.Title>
-                    <Typography.Paragraph>{chatResult.answer}</Typography.Paragraph>
-                    <Typography.Title level={5}>引用片段</Typography.Title>
-                    <List
-                      dataSource={chatResult.citations}
-                      renderItem={(citation) => (
-                        <List.Item>
-                          <List.Item.Meta title={citation.filename} description={citation.content} />
-                        </List.Item>
-                      )}
-                    />
-                  </div>
-                )}
-              </Card>
-            ),
-          },
-          {
-            key: "reports",
-            label: "投研报告",
-            children: (
-              <Card
-                className="glass-card"
-                extra={
-                  <Button type="primary" onClick={async () => { await generateReport(projectId); await load(); }}>
-                    生成报告
-                  </Button>
-                }
-              >
-                <List
-                  dataSource={reports}
-                  renderItem={(report) => (
-                    <List.Item>
-                      <List.Item.Meta title={report.title} description={report.content.slice(0, 280)} />
-                    </List.Item>
-                  )}
-                />
-              </Card>
-            ),
-          },
-        ]}
-      />
+      <Card className="glass-card"><Typography.Title level={2}>{project?.name}</Typography.Title><Typography.Paragraph>{project?.description}</Typography.Paragraph></Card>
+      <Tabs items={[
+        { key: "overview", label: "项目概览", children: <Row gutter={[16, 16]}><Col span={8}><Card className="glass-card" title="公司">{project?.company_name}</Card></Col><Col span={8}><Card className="glass-card" title="行业">{project?.industry}</Card></Col><Col span={8}><Card className="glass-card" title="阶段">{project?.stage}</Card></Col></Row> },
+        { key: "files", label: "文档资料", children: <Card className="glass-card" extra={<><Upload {...uploadProps}><Button>选择文件</Button></Upload><Button type="primary" disabled={!selectedFiles.length} onClick={() => void submitBatch()}>开始批量解析</Button></>}>
+          {batchId && <Progress percent={batchProgress} status={batchProgress === 100 ? "success" : "active"} />}
+          <List dataSource={files} renderItem={(file) => <List.Item><List.Item.Meta title={file.filename} description={`${file.parse_status} · ${file.parse_stage} · ${file.content_type}${file.parse_error ? ` · ${file.parse_error}` : ""}`} /><Progress percent={file.progress} size="small" style={{ width: 180 }} status={file.parse_status === "failed" ? "exception" : undefined} /></List.Item>} />
+        </Card> },
+        { key: "chat", label: "AI 问答", children: <Card className="glass-card"><Input.TextArea rows={4} value={question} onChange={(event) => setQuestion(event.target.value)} /><Button type="primary" style={{ marginTop: 12 }} onClick={async () => setChatResult(await askProject(projectId, question))}>发起分析</Button>{chatResult && <div style={{ marginTop: 16 }}><Typography.Title level={4}>回答</Typography.Title><Typography.Paragraph>{chatResult.answer}</Typography.Paragraph><List dataSource={chatResult.citations} renderItem={(citation) => <List.Item><List.Item.Meta title={citation.filename} description={citation.content} /></List.Item>} /></div>}</Card> },
+        { key: "reports", label: "投研报告", children: <Card className="glass-card" extra={<Button type="primary" onClick={async () => { await generateReport(projectId); await load(); }}>生成报告</Button>}><List dataSource={reports} renderItem={(report) => <List.Item><List.Item.Meta title={report.title} description={report.content.slice(0, 280)} /></List.Item>} /></Card> },
+      ]} />
     </div>
   );
 }
-

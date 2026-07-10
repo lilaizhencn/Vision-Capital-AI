@@ -1,14 +1,17 @@
 import mimetypes
+import re
 import uuid
 
 from fastapi import HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
-from app.models.file import ParseStatus
+from app.core.config import settings
+from app.models.file import BatchStatus, DocumentBatch, ParseStage, ParseStatus, ProjectFile
 from app.models.user import User
 from app.repositories.file_repository import FileRepository
 from app.repositories.project_repository import ProjectRepository
 from app.storage.storage_service import get_storage_service
+from app.schemas.file import BatchCreateRequest, BatchRead, UploadSession
 from app.workers.tasks import parse_uploaded_file_task
 
 
@@ -37,10 +40,69 @@ class FileService:
             r2_bucket=stored.bucket,
             r2_object_key=stored.object_key,
             parse_status=ParseStatus.pending,
+            parse_stage=ParseStage.validate,
+            progress=10,
         )
 
         parse_uploaded_file_task.delay(file.id)
         return file
+
+    def create_batch(self, project_id: str, user: User, request: BatchCreateRequest) -> BatchRead:
+        project = self.project_repo.get_for_owner(project_id, user.id)
+        if not project:
+            raise HTTPException(status_code=404, detail="Project not found")
+        if not request.files or len(request.files) > 100:
+            raise HTTPException(status_code=400, detail="A batch must contain 1 to 100 files")
+        if any(item.size < 0 or item.size > settings.max_upload_size_bytes for item in request.files):
+            raise HTTPException(status_code=413, detail="File exceeds the upload size limit")
+        batch = DocumentBatch(project_id=project_id, total_files=len(request.files), status=BatchStatus.uploading)
+        self.db.add(batch)
+        self.db.flush()
+        sessions: list[UploadSession] = []
+        for item in request.files:
+            safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", item.filename)[:160]
+            key = f"{project_id}/{batch.id}/{uuid.uuid4()}-{safe_name}"
+            plan = self.storage.create_upload_plan(key, item.size, item.content_type)
+            file = ProjectFile(
+                project_id=project_id, batch_id=batch.id, filename=item.filename,
+                content_type=item.content_type, size=item.size, r2_bucket=getattr(self.storage, "bucket", None),
+                r2_object_key=key, parse_status=ParseStatus.pending, parse_stage=ParseStage.upload, progress=0,
+                multipart_upload_id=plan.upload_id,
+            )
+            self.db.add(file)
+            self.db.flush()
+            sessions.append(UploadSession(
+                file_id=file.id, object_key=key, upload_url=plan.upload_url, upload_mode=plan.upload_mode,
+                part_size=plan.part_size, total_parts=plan.total_parts, upload_id=plan.upload_id,
+            ))
+        self.db.commit()
+        files = list(self.db.query(ProjectFile).filter(ProjectFile.batch_id == batch.id).all())
+        return BatchRead.model_validate({"id": batch.id, "project_id": project_id, "total_files": batch.total_files,
+            "completed_files": 0, "failed_files": 0, "progress": 0, "status": batch.status,
+            "files": files, "upload_sessions": sessions})
+
+    def complete_batch(self, batch_id: str, user: User) -> BatchRead:
+        batch = self.db.get(DocumentBatch, batch_id)
+        if not batch or not self.project_repo.get_for_owner(batch.project_id, user.id):
+            raise HTTPException(status_code=404, detail="Batch not found")
+        files = list(self.db.query(ProjectFile).filter(ProjectFile.batch_id == batch.id).all())
+        for file in files:
+            if not self.storage.object_exists(file.r2_object_key, file.size):
+                file.parse_status = ParseStatus.failed
+                file.parse_error = "Uploaded object is missing or size does not match"
+                file.parse_stage = ParseStage.validate
+                file.progress = 0
+            else:
+                file.parse_status = ParseStatus.pending
+                file.parse_stage = ParseStage.validate
+                file.progress = 10
+                parse_uploaded_file_task.delay(file.id)
+        batch.status = BatchStatus.queued
+        self.db.commit()
+        return BatchRead.model_validate({"id": batch.id, "project_id": batch.project_id,
+            "total_files": batch.total_files, "completed_files": batch.completed_files,
+            "failed_files": batch.failed_files, "progress": batch.progress, "status": batch.status,
+            "files": files, "upload_sessions": []})
 
     def delete(self, file_id: str, user: User) -> None:
         file = self.file_repo.get(file_id)
@@ -52,4 +114,3 @@ class FileService:
 
         self.storage.delete_file(file.r2_object_key)
         self.file_repo.delete(file)
-
