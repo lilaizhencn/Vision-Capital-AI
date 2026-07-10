@@ -11,8 +11,8 @@ depends_on = None
 
 def upgrade() -> None:
     bind = op.get_bind()
-    batch_status = sa.Enum("uploading", "queued", "processing", "completed", "failed", name="batch_status")
-    parse_stage = sa.Enum("upload", "validate", "ocr", "table_extract", "llm_extract", "persist", "completed", name="parse_stage")
+    batch_status = sa.Enum("uploading", "queued", "processing", "completed", "failed", name="batch_status", create_type=False)
+    parse_stage = sa.Enum("upload", "validate", "ocr", "table_extract", "llm_extract", "persist", "completed", name="parse_stage", create_type=False)
     batch_status.create(bind, checkfirst=True)
     parse_stage.create(bind, checkfirst=True)
     op.create_table(

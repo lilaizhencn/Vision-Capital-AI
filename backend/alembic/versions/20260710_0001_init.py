@@ -25,9 +25,9 @@ def upgrade() -> None:
     op.create_index("ix_users_username", "users", ["username"])
 
     investment_status = sa.Enum(
-        "pre_investment", "in_progress", "post_investment", "rejected", "exited", name="investment_status"
+        "pre_investment", "in_progress", "post_investment", "rejected", "exited", name="investment_status", create_type=False
     )
-    parse_status = sa.Enum("pending", "processing", "completed", "failed", name="parse_status")
+    parse_status = sa.Enum("pending", "processing", "completed", "failed", name="parse_status", create_type=False)
     investment_status.create(op.get_bind(), checkfirst=True)
     parse_status.create(op.get_bind(), checkfirst=True)
 
