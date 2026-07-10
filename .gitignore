@@ -14,4 +14,4 @@ dist/
 coverage/
 .DS_Store
 backend/storage_data/
-
+backend/*.db
