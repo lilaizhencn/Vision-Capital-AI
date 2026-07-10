@@ -27,6 +27,13 @@ from app.workers.celery_app import celery_app
 
 
 RETRYABLE_ERRORS = (ConnectionError, TimeoutError, EndpointConnectionError, ReadTimeoutError, APIConnectionError, RateLimitError)
+STAGE_PROGRESS = {
+    ParseStage.validate: 10,
+    ParseStage.ocr: 20,
+    ParseStage.table_extract: 60,
+    ParseStage.llm_extract: 80,
+    ParseStage.persist: 95,
+}
 
 
 @celery_app.task(name="parse_uploaded_file_task")
@@ -66,7 +73,7 @@ def validate_uploaded_file_task(self, file_id: str):
             scan_result = VirusScanner().scan_file(path)
         file.virus_scan_status = "clean" if scan_result != "skipped" else "skipped"
         file.virus_scan_result = scan_result
-        _finish_stage(db, file, ParseStage.ocr, 35)
+        _finish_stage(db, file, ParseStage.ocr, STAGE_PROGRESS[ParseStage.ocr])
         return file_id
     except Exception as exc:
         _fail_stage(db, file_id, ParseStage.validate, exc, self)
@@ -86,7 +93,7 @@ def ocr_document_task(self, file_id: str):
             path = Path(directory) / "object"
             get_storage_service().download_file_to_path(file.r2_object_key, path)
             file.parsed_text = DocumentParserService().extract_text(file.filename, file.content_type, path)
-        _finish_stage(db, file, ParseStage.table_extract, 55)
+        _finish_stage(db, file, ParseStage.table_extract, STAGE_PROGRESS[ParseStage.table_extract])
         return file_id
     except Exception as exc:
         _fail_stage(db, file_id, ParseStage.ocr, exc, self)
@@ -106,7 +113,7 @@ def extract_document_tables_task(self, file_id: str):
             path = Path(directory) / "object"
             get_storage_service().download_file_to_path(file.r2_object_key, path)
             file.table_text = DocumentParserService().extract_table_text(file.filename, file.content_type, path)
-        _finish_stage(db, file, ParseStage.llm_extract, 75)
+        _finish_stage(db, file, ParseStage.llm_extract, STAGE_PROGRESS[ParseStage.llm_extract])
         return file_id
     except Exception as exc:
         _fail_stage(db, file_id, ParseStage.table_extract, exc, self)
@@ -127,7 +134,7 @@ def extract_document_data_task(self, file_id: str):
             file.extracted_data = LLMService().extract_document_data(text)
         except RuntimeError:
             file.extracted_data = None
-        _finish_stage(db, file, ParseStage.persist, 90)
+        _finish_stage(db, file, ParseStage.persist, STAGE_PROGRESS[ParseStage.persist])
         return file_id
     except Exception as exc:
         _fail_stage(db, file_id, ParseStage.llm_extract, exc, self)
@@ -185,7 +192,7 @@ def _begin_stage(db: Session, file_id: str, stage: ParseStage) -> ProjectFile | 
     file.parse_status = ParseStatus.processing
     file.parse_stage = stage
     file.parse_error = None
-    file.progress = {ParseStage.validate: 10, ParseStage.ocr: 35, ParseStage.table_extract: 55, ParseStage.llm_extract: 75, ParseStage.persist: 90}[stage]
+    file.progress = STAGE_PROGRESS[stage]
     db.commit()
     return file
 

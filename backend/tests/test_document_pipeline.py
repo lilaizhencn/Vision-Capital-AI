@@ -178,6 +178,10 @@ def test_chunking_overlaps_and_estimates_tokens() -> None:
     assert estimate_tokens(text) > 0
 
 
+def test_parse_progress_matches_solution_stage_weights() -> None:
+    assert [tasks.STAGE_PROGRESS[stage] for stage in tasks.STAGE_PROGRESS] == [10, 20, 60, 80, 95]
+
+
 def test_local_storage_round_trip(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(settings, "local_storage_path", tmp_path)
     storage = LocalStorageService()
