@@ -28,7 +28,10 @@ export function ProjectDetailPage() {
   useEffect(() => {
     if (!batchId) return;
     const token = localStorage.getItem("vision_capital_ai_token");
-    const base = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000").replace(/^http/, "ws");
+    const configuredBase = import.meta.env.VITE_API_BASE_URL;
+    const base = configuredBase
+      ? configuredBase.replace(/^http/, "ws")
+      : `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`;
     const socket = new WebSocket(`${base}/api/ws/batches/${batchId}?token=${encodeURIComponent(token ?? "")}`);
     socket.onmessage = (event) => {
       const payload = JSON.parse(event.data) as { progress: number; status: string };

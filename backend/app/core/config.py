@@ -64,8 +64,14 @@ class Settings(BaseSettings):
         return [item.strip() for item in self.cors_allowed_origins.split(",") if item.strip()]
 
     def validate_production(self) -> None:
-        if self.app_env.lower() == "production" and self.app_secret_key == "change-me":
-            raise RuntimeError("APP_SECRET_KEY must be changed in production")
+        if self.app_env.lower() != "production":
+            return
+        if self.app_secret_key == "change-me" or self.jwt_secret_key == "change-me":
+            raise RuntimeError("APP_SECRET_KEY and JWT_SECRET_KEY must be changed in production")
+        if not self.r2_enabled:
+            raise RuntimeError("R2 configuration is required in production")
+        if not self.database_url.startswith("postgresql"):
+            raise RuntimeError("PostgreSQL is required in production")
 
     @property
     def local_storage_absolute_path(self) -> Path:
