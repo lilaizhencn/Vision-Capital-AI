@@ -90,6 +90,25 @@ jobs:
           done
           test "$status" = "completed"
 
+          curl --fail --silent --location https://samplefile.com/samples/download/image/png/png_receipt_scan_sample.png/ -o /tmp/vision-ci-receipt.png
+          image_upload=$(curl --fail --silent -X POST "http://localhost:8000/api/projects/$project_id/files/upload" -H "Authorization: Bearer $token" -F upload_file=@/tmp/vision-ci-receipt.png)
+          image_file_id=$(echo "$image_upload" | jq -r '.file.id')
+          for attempt in $(seq 1 60); do
+            image_files=$(curl --fail --silent "http://localhost:8000/api/projects/$project_id/files" -H "Authorization: Bearer $token")
+            image_status=$(echo "$image_files" | jq -r --arg id "$image_file_id" '.[] | select(.id == $id) | .parse_status // "missing"')
+            if [ "$image_status" = "completed" ]; then
+              break
+            fi
+            if [ "$image_status" = "failed" ]; then
+              echo "$image_files"
+              exit 1
+            fi
+            sleep 5
+          done
+          test "$image_status" = "completed"
+          ocr_chars=$(docker compose exec -T backend python -c "from app.core.database import SessionLocal; from app.models.file import ProjectFile; db=SessionLocal(); f=db.get(ProjectFile, '$image_file_id'); print(len(f.parsed_text or '')); db.close()")
+          test "$ocr_chars" -gt 0
+
           checksum=$(sha256sum /tmp/vision-ci.txt | awk '{print $1}')
           batch=$(curl --fail --silent -X POST "http://localhost:8000/api/projects/$project_id/file-batches" \
             -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
