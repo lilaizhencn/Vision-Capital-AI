@@ -2,6 +2,7 @@
   "CORSRules": [
     {
       "AllowedOrigins": [
+        "https://vision.tokdou.com",
         "http://localhost:8090",
         "https://app.example.com"
       ],
