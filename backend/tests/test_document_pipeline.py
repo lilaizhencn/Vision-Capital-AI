@@ -20,7 +20,7 @@ from app.services.document_parser_service import DocumentParserService
 from app.main import app
 from app.core.database import Base, get_db
 from app.storage.storage_service import LocalStorageService
-from app.core.config import settings
+from app.core.config import Settings, settings
 from app.workers import tasks
 from app.services import file_service
 from app.api import websocket as websocket_api
@@ -122,6 +122,26 @@ def test_file_signature_validation_rejects_extension_spoofing() -> None:
 def test_virus_scanner_is_explicitly_skipped_only_outside_production(monkeypatch) -> None:
     monkeypatch.setattr(settings, "virus_scan_enabled", False)
     assert VirusScanner().scan_bytes(b"safe") == "skipped"
+
+
+def test_production_configuration_requires_llm_credentials() -> None:
+    production = Settings(
+        app_env="production",
+        app_secret_key="app-secret",
+        jwt_secret_key="jwt-secret",
+        database_url="postgresql+psycopg://user:password@db/vision",
+        r2_endpoint_url="https://example.r2.cloudflarestorage.com",
+        r2_access_key_id="access",
+        r2_secret_access_key="secret",
+        r2_bucket_name="app-public",
+        virus_scan_enabled=True,
+    )
+
+    with pytest.raises(RuntimeError, match="LLM_API_KEY"):
+        production.validate_production()
+
+    production.llm_api_key = "test-key"
+    production.validate_production()
 
 
 def test_virus_scanner_streams_clamav_protocol(monkeypatch) -> None:

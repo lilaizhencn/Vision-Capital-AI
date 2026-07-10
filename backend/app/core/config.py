@@ -78,6 +78,8 @@ class Settings(BaseSettings):
             raise RuntimeError("PostgreSQL is required in production")
         if not self.virus_scan_enabled:
             raise RuntimeError("Virus scanning must be enabled in production")
+        if not self.llm_api_key:
+            raise RuntimeError("LLM_API_KEY is required in production")
 
     @property
     def local_storage_absolute_path(self) -> Path:
