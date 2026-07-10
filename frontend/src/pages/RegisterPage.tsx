@@ -10,7 +10,7 @@ export function RegisterPage() {
     try {
       const data = await register(values);
       localStorage.setItem("vision_capital_ai_token", data.access_token);
-      navigate("/");
+      navigate("/workspace");
     } catch (error: any) {
       message.error(error.response?.data?.detail ?? "Register failed");
     }

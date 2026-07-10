@@ -5,6 +5,7 @@ import { AppLayout } from "../layouts/AppLayout";
 import { AssistantPage } from "../pages/AssistantPage";
 import { DashboardPage } from "../pages/DashboardPage";
 import { LoginPage } from "../pages/LoginPage";
+import { LandingPage } from "../pages/LandingPage";
 import { ProjectDetailPage } from "../pages/ProjectDetailPage";
 import { ProjectsPage } from "../pages/ProjectsPage";
 import { RegisterPage } from "../pages/RegisterPage";
@@ -23,6 +24,7 @@ function ProtectedRoute({ children }: { children: ReactElement }) {
 export function AppRouter() {
   return (
     <Routes>
+      <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route
@@ -31,7 +33,7 @@ export function AppRouter() {
           <ProtectedRoute>
             <AppLayout>
               <Routes>
-                <Route index element={<DashboardPage />} />
+                <Route path="workspace" element={<DashboardPage />} />
                 <Route path="projects" element={<ProjectsPage />} />
                 <Route path="projects/:projectId" element={<ProjectDetailPage />} />
                 <Route path="assistant" element={<AssistantPage />} />
@@ -46,5 +48,4 @@ export function AppRouter() {
     </Routes>
   );
 }
-
 

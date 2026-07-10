@@ -18,7 +18,7 @@ import type { Project } from "../types";
 const { Header, Sider, Content } = Layout;
 
 const menuItems = [
-  { key: "/", icon: <BarChartOutlined />, label: "工作台" },
+  { key: "/workspace", icon: <BarChartOutlined />, label: "工作台" },
   { key: "/projects", icon: <AppstoreOutlined />, label: "投资项目" },
   { key: "/assistant", icon: <ExperimentOutlined />, label: "AI 研究室" },
   { key: "/reports", icon: <FileTextOutlined />, label: "报告中心" },
@@ -111,7 +111,7 @@ export function AppLayout({ children }: PropsWithChildren) {
   return (
     <Layout className="app-shell">
       <Sider width={232} className="app-sider" breakpoint="lg" collapsedWidth={0}>
-        <div className="brand-block" onClick={() => navigate("/")} role="button" tabIndex={0}>
+        <div className="brand-block" onClick={() => navigate("/workspace")} role="button" tabIndex={0}>
           <div className="brand-mark">V</div>
           <div>
             <Typography.Title level={3}>Vision Capital</Typography.Title>
@@ -122,7 +122,7 @@ export function AppLayout({ children }: PropsWithChildren) {
         <Menu
           mode="inline"
           theme="dark"
-          selectedKeys={[location.pathname === "/" ? "/" : `/${location.pathname.split("/")[1]}`]}
+          selectedKeys={[location.pathname === "/workspace" ? "/workspace" : `/${location.pathname.split("/")[1]}`]}
           items={menuItems}
           onClick={({ key }) => navigate(key)}
         />
@@ -130,7 +130,7 @@ export function AppLayout({ children }: PropsWithChildren) {
       </Sider>
       <Layout>
         <Header className="app-header">
-          <div className="breadcrumb-line"><span>投研工作台</span><span className="breadcrumb-slash">/</span><strong>{location.pathname === "/" ? "今日概览" : menuItems.find((item) => item.key === `/${location.pathname.split("/")[1]}`)?.label ?? "项目空间"}</strong></div>
+          <div className="breadcrumb-line"><span>投研工作台</span><span className="breadcrumb-slash">/</span><strong>{location.pathname === "/workspace" ? "今日概览" : menuItems.find((item) => item.key === `/${location.pathname.split("/")[1]}`)?.label ?? "项目空间"}</strong></div>
           <div className="header-actions">
             <Input.Search className="global-search" prefix={<SearchOutlined />} placeholder="搜索项目、公司、报告" enterButton={false} onSearch={(value) => void searchProjects(value)} />
             <Button type="text" icon={<UserOutlined />} className="user-button" onClick={logout}>退出登录</Button>
