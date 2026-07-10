@@ -109,6 +109,34 @@ jobs:
           ocr_chars=$(docker compose exec -T backend python -c "from app.core.database import SessionLocal; from app.models.file import ProjectFile; db=SessionLocal(); f=db.get(ProjectFile, '$image_file_id'); print(len(f.parsed_text or '')); db.close()")
           test "$ocr_chars" -gt 0
 
+          curl --fail --silent https://raw.githubusercontent.com/pdf-association/pdf20examples/master/pdf20-utf8-test.pdf -o /tmp/vision-public.pdf
+          pdf_upload=$(curl --fail --silent -X POST "http://localhost:8000/api/projects/$project_id/files/upload" -H "Authorization: Bearer $token" -F upload_file=@/tmp/vision-public.pdf)
+          pdf_file_id=$(echo "$pdf_upload" | jq -r '.file.id')
+          for attempt in $(seq 1 60); do
+            public_files=$(curl --fail --silent "http://localhost:8000/api/projects/$project_id/files" -H "Authorization: Bearer $token")
+            public_status=$(echo "$public_files" | jq -r --arg id "$pdf_file_id" '.[] | select(.id == $id) | .parse_status // "missing"')
+            if [ "$public_status" = "completed" ]; then break; fi
+            if [ "$public_status" = "failed" ]; then echo "$public_files"; exit 1; fi
+            sleep 5
+          done
+          test "$public_status" = "completed"
+          pdf_text=$(docker compose exec -T backend python -c "from app.core.database import SessionLocal; from app.models.file import ProjectFile; db=SessionLocal(); f=db.get(ProjectFile, '$pdf_file_id'); print(f.parsed_text or ''); db.close()")
+          echo "$pdf_text" | grep -q "UTF-8 test file"
+
+          curl --fail --silent https://raw.githubusercontent.com/PacktPublishing/Getting-Started-with-Tableau-2019.2/master/Chapter03/Sample-Superstore.xlsx -o /tmp/vision-public.xlsx
+          xlsx_upload=$(curl --fail --silent -X POST "http://localhost:8000/api/projects/$project_id/files/upload" -H "Authorization: Bearer $token" -F upload_file=@/tmp/vision-public.xlsx)
+          xlsx_file_id=$(echo "$xlsx_upload" | jq -r '.file.id')
+          for attempt in $(seq 1 60); do
+            public_files=$(curl --fail --silent "http://localhost:8000/api/projects/$project_id/files" -H "Authorization: Bearer $token")
+            public_status=$(echo "$public_files" | jq -r --arg id "$xlsx_file_id" '.[] | select(.id == $id) | .parse_status // "missing"')
+            if [ "$public_status" = "completed" ]; then break; fi
+            if [ "$public_status" = "failed" ]; then echo "$public_files"; exit 1; fi
+            sleep 5
+          done
+          test "$public_status" = "completed"
+          xlsx_text=$(docker compose exec -T backend python -c "from app.core.database import SessionLocal; from app.models.file import ProjectFile; db=SessionLocal(); f=db.get(ProjectFile, '$xlsx_file_id'); print(f.parsed_text or ''); db.close()")
+          echo "$xlsx_text" | grep -q "Orders"
+
           checksum=$(sha256sum /tmp/vision-ci.txt | awk '{print $1}')
           batch=$(curl --fail --silent -X POST "http://localhost:8000/api/projects/$project_id/file-batches" \
             -H "Authorization: Bearer $token" -H 'Content-Type: application/json' \
