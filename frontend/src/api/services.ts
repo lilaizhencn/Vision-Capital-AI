@@ -56,11 +56,17 @@ export async function uploadProjectFile(projectId: string, file: File) {
 }
 
 export async function createFileBatch(projectId: string, files: File[]) {
-  const checksums = await Promise.all(files.map(async (file) => {
-    if (!globalThis.crypto?.subtle) return null;
+  // Hash sequentially and avoid buffering large files in the browser. The
+  // worker always computes the authoritative checksum after upload.
+  const checksums: (string | null)[] = [];
+  for (const file of files) {
+    if (!globalThis.crypto?.subtle || file.size > 64 * 1024 * 1024) {
+      checksums.push(null);
+      continue;
+    }
     const digest = await globalThis.crypto.subtle.digest("SHA-256", await file.arrayBuffer());
-    return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-  }));
+    checksums.push(Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join(""));
+  }
   const { data } = await client.post<FileBatch>(`/api/projects/${projectId}/file-batches`, {
     files: files.map((file, index) => ({ filename: file.name, size: file.size, content_type: file.type || "application/octet-stream", checksum_sha256: checksums[index] })),
   });
@@ -69,6 +75,11 @@ export async function createFileBatch(projectId: string, files: File[]) {
 
 export async function completeFileBatch(batchId: string) {
   const { data } = await client.post<FileBatch>(`/api/file-batches/${batchId}/complete`);
+  return data;
+}
+
+export async function getFileBatch(batchId: string) {
+  const { data } = await client.get<FileBatch>(`/api/file-batches/${batchId}`);
   return data;
 }
 

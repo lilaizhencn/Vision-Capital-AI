@@ -21,6 +21,8 @@ class FileRead(BaseModel):
     retry_count: int
     checksum_sha256: str | None
     expected_checksum_sha256: str | None
+    virus_scan_status: str
+    virus_scan_result: str | None
     extracted_data: dict[str, object] | None
     multipart_upload_id: str | None
     created_at: datetime

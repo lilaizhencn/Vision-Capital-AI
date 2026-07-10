@@ -1,5 +1,6 @@
 from io import BytesIO
 import hashlib
+import socket
 
 import pandas as pd
 import pytest
@@ -23,6 +24,8 @@ from app.workers import tasks
 from app.services import file_service
 from app.api import websocket as websocket_api
 from app.services.file_service import FileService
+from app.services.file_validation_service import validate_file_signature
+from app.services.virus_scan_service import VirusScanner
 
 
 class FakeOCR:
@@ -109,6 +112,41 @@ def test_file_validation_rejects_unsupported_extensions() -> None:
         FileService._validate_filename("no-extension")
 
 
+def test_file_signature_validation_rejects_extension_spoofing() -> None:
+    with pytest.raises(ValueError, match="signature"):
+        validate_file_signature("fake.pdf", b"not a pdf")
+    validate_file_signature("notes.txt", b"plain text")
+
+
+def test_virus_scanner_is_explicitly_skipped_only_outside_production(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "virus_scan_enabled", False)
+    assert VirusScanner().scan_bytes(b"safe") == "skipped"
+
+
+def test_virus_scanner_streams_clamav_protocol(monkeypatch) -> None:
+    class FakeConnection:
+        def __init__(self):
+            self.payload = bytearray()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def sendall(self, value):
+            self.payload.extend(value)
+
+        def recv(self, _size):
+            return b"stream: OK\n"
+
+    fake = FakeConnection()
+    monkeypatch.setattr(settings, "virus_scan_enabled", True)
+    monkeypatch.setattr(socket, "create_connection", lambda *_args, **_kwargs: fake)
+    assert VirusScanner().scan_bytes(b"safe") == "stream: OK"
+    assert bytes(fake.payload).startswith(b"zINSTREAM\x00")
+
+
 def test_chunking_overlaps_and_estimates_tokens() -> None:
     text = "0123456789" * 300
 
@@ -127,6 +165,9 @@ def test_local_storage_round_trip(tmp_path, monkeypatch) -> None:
 
     assert storage.object_exists("batch/file.txt", expected_size=5)
     assert storage.download_file("batch/file.txt") == b"hello"
+    destination = tmp_path / "streamed" / "file.txt"
+    storage.download_file_to_path("batch/file.txt", destination)
+    assert destination.read_bytes() == b"hello"
 
 
 def test_health_contract_without_infrastructure() -> None:
@@ -153,6 +194,7 @@ def api_client(tmp_path, monkeypatch):
     monkeypatch.setattr(tasks, "SessionLocal", TestSession)
     monkeypatch.setattr(websocket_api, "SessionLocal", TestSession)
     monkeypatch.setattr(settings, "local_storage_path", tmp_path)
+    monkeypatch.setattr(settings, "celery_task_always_eager", True)
     eager_parse = lambda file_id: tasks.parse_uploaded_file_task.run(file_id)
     monkeypatch.setattr(file_service, "parse_uploaded_file_task", SimpleNamespace(delay=eager_parse))
     client = TestClient(app)
@@ -211,6 +253,9 @@ def test_batch_upload_complete_and_parse_flow(api_client) -> None:
     assert created.status_code == 200
     batch = created.json()
     file_id = batch["files"][0]["id"]
+    resumable = api_client.get(f"/api/file-batches/{batch['id']}", headers=headers)
+    assert resumable.status_code == 200
+    assert resumable.json()["upload_sessions"][0]["file_id"] == file_id
 
     uploaded = api_client.post(f"/api/file-batches/{batch['id']}/files/{file_id}/content", headers=headers, files={"upload_file": ("batch.txt", b"hello", "text/plain")})
     assert uploaded.status_code == 200
@@ -226,6 +271,7 @@ def test_batch_upload_complete_and_parse_flow(api_client) -> None:
     assert files[0]["parse_status"] == "completed"
     assert files[0]["batch_id"] == batch["id"]
     assert files[0]["checksum_sha256"] == hashlib.sha256(b"hello").hexdigest()
+    assert files[0]["virus_scan_status"] == "skipped"
     repeated = api_client.post(f"/api/file-batches/{batch['id']}/complete", headers=headers)
     assert repeated.status_code == 200
     assert repeated.json()["status"] == "completed"

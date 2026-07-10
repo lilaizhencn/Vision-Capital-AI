@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import ceil
 from pathlib import Path
+import shutil
 
 import boto3
 from botocore.client import Config
@@ -40,6 +41,11 @@ class LocalStorageService:
     def download_file(self, object_key: str) -> bytes:
         return (self.base_path / object_key).read_bytes()
 
+    def download_file_to_path(self, object_key: str, destination: Path) -> None:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with (self.base_path / object_key).open("rb") as source, destination.open("wb") as target:
+            shutil.copyfileobj(source, target, length=1024 * 1024)
+
     def delete_file(self, object_key: str) -> None:
         path = self.base_path / object_key
         if path.exists():
@@ -51,6 +57,9 @@ class LocalStorageService:
     def create_upload_plan(self, object_key: str, size: int, content_type: str) -> UploadPlan:
         # Local fallback keeps the same API contract; the backend receives the file bytes.
         return UploadPlan(object_key, None, "backend", None, None, None)
+
+    def presign_upload_url(self, object_key: str, content_type: str) -> str | None:
+        return None
 
     def object_exists(self, object_key: str, expected_size: int | None = None) -> bool:
         path = self.base_path / object_key
@@ -81,6 +90,12 @@ class R2StorageService:
         response = self.client.get_object(Bucket=self.bucket, Key=object_key)
         return response["Body"].read()
 
+    def download_file_to_path(self, object_key: str, destination: Path) -> None:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        response = self.client.get_object(Bucket=self.bucket, Key=object_key)
+        with destination.open("wb") as target:
+            shutil.copyfileobj(response["Body"], target, length=1024 * 1024)
+
     def delete_file(self, object_key: str) -> None:
         self.client.delete_object(Bucket=self.bucket, Key=object_key)
 
@@ -94,11 +109,7 @@ class R2StorageService:
     def create_upload_plan(self, object_key: str, size: int, content_type: str) -> UploadPlan:
         # Small files use a single signed PUT; large files use S3 multipart upload.
         if size < settings.upload_multipart_threshold_bytes:
-            url = self.client.generate_presigned_url(
-                "put_object",
-                Params={"Bucket": self.bucket, "Key": object_key, "ContentType": content_type},
-                ExpiresIn=settings.r2_presigned_url_expiry_seconds,
-            )
+            url = self.presign_upload_url(object_key, content_type)
             return UploadPlan(object_key, url, "direct", None, None, None)
         parts = ceil(size / settings.upload_part_size_bytes)
         upload = self.client.create_multipart_upload(Bucket=self.bucket, Key=object_key, ContentType=content_type)
@@ -106,6 +117,13 @@ class R2StorageService:
         # The upload id is embedded server-side in the object key registry in production.
         # Returning it through the signed URL keeps this starter implementation stateless.
         return UploadPlan(object_key, None, "multipart", settings.upload_part_size_bytes, parts, upload_id)
+
+    def presign_upload_url(self, object_key: str, content_type: str) -> str:
+        return self.client.generate_presigned_url(
+            "put_object",
+            Params={"Bucket": self.bucket, "Key": object_key, "ContentType": content_type},
+            ExpiresIn=settings.r2_presigned_url_expiry_seconds,
+        )
 
     def presign_upload_part(self, object_key: str, upload_id: str, part_number: int) -> str:
         return self.client.generate_presigned_url(

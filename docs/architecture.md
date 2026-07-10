@@ -56,3 +56,15 @@ flowchart LR
 - `backend/app/storage`: R2 与本地回退存储封装。
 - `backend/app/workers`: Celery 任务与 worker 入口。
 - `backend/app/rag` 与 `backend/app/ai`: 文本切片、Embedding、LLM 与检索增强问答能力。
+## Parsing worker stages
+
+```mermaid
+flowchart LR
+    Validate[Validate size hash signature] --> Scan[ClamAV scan]
+    Scan --> OCR[OCR and text extraction]
+    OCR --> Tables[Table extraction]
+    Tables --> LLM[Structured LLM extraction]
+    LLM --> Persist[Chunk embedding and persistence]
+```
+
+Each stage is a separate Celery task. The `parse_stage_runs` table stores a durable idempotency key for `batch + file + stage`, so retries do not duplicate completed work.

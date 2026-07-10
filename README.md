@@ -144,3 +144,9 @@ celery -A app.workers.celery_app.celery_app worker --loglevel=info
 - 增加系统级报告中心与全文检索
 - 增加投后提醒、舆情追踪、自动尽调 Agent
 - 增加权限分级、组织空间、多用户协作
+
+## Production parsing pipeline
+
+The upload pipeline is split into independent Celery stages: validation and checksum, ClamAV scan, OCR/text extraction, table extraction, structured LLM extraction, and persistence. Each file/stage has a durable idempotency record, retry/backoff behavior, and a dead-letter record after the configured retry limit.
+
+Production Compose starts ClamAV and sets `VIRUS_SCAN_ENABLED=true`. The backend rejects production startup when virus scanning is disabled. Legacy `.doc` files use `antiword`; legacy `.xls` files use `xlrd`.

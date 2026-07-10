@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     upload_part_size_bytes: int = 8 * 1024 * 1024
     max_upload_size_bytes: int = 1024 * 1024 * 1024
     max_parse_retries: int = 3
+    virus_scan_enabled: bool = False
+    virus_scan_host: str = "clamav"
+    virus_scan_port: int = 3310
+    virus_scan_timeout_seconds: int = 30
 
     llm_base_url: str = "https://api.openai.com/v1"
     llm_api_key: str | None = None
@@ -72,6 +76,8 @@ class Settings(BaseSettings):
             raise RuntimeError("R2 configuration is required in production")
         if not self.database_url.startswith("postgresql"):
             raise RuntimeError("PostgreSQL is required in production")
+        if not self.virus_scan_enabled:
+            raise RuntimeError("Virus scanning must be enabled in production")
 
     @property
     def local_storage_absolute_path(self) -> Path:

@@ -24,7 +24,7 @@ export function DashboardPage() {
       <Row gutter={[16, 16]}>
         <Col span={6}><StatCard title="项目总数" value={summary?.total_projects ?? 0} /></Col>
         <Col span={6}><StatCard title="投前项目" value={summary?.pre_investment_projects ?? 0} /></Col>
-        <Col span={6}><StatCard title="投中文件" value={summary?.in_progress_projects ?? 0} /></Col>
+        <Col span={6}><StatCard title="投中项目" value={summary?.in_progress_projects ?? 0} /></Col>
         <Col span={6}><StatCard title="投后项目" value={summary?.post_investment_projects ?? 0} /></Col>
       </Row>
       <Row gutter={[16, 16]}>

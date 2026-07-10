@@ -3,7 +3,7 @@ import type { UploadFile, UploadProps } from "antd";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 
-import { askProject, completeFileBatch, completeMultipart, createFileBatch, generateReport, getMultipartPartUrl, getProject, getProjectFiles, getReports, getUploadedParts, retryFile, uploadBatchFileContent, uploadMultipartPartContent } from "../api/services";
+import { askProject, completeFileBatch, completeMultipart, createFileBatch, generateReport, getFileBatch, getMultipartPartUrl, getProject, getProjectFiles, getReports, getUploadedParts, retryFile, uploadBatchFileContent, uploadMultipartPartContent } from "../api/services";
 import type { ChatResponse, Project, ProjectFile, Report } from "../types";
 
 export function ProjectDetailPage() {
@@ -15,6 +15,7 @@ export function ProjectDetailPage() {
   const [chatResult, setChatResult] = useState<ChatResponse | null>(null);
   const [selectedFiles, setSelectedFiles] = useState<UploadFile[]>([]);
   const [batchId, setBatchId] = useState<string | null>(null);
+  const [resumableBatch, setResumableBatch] = useState<Awaited<ReturnType<typeof createFileBatch>> | null>(null);
   const [batchProgress, setBatchProgress] = useState(0);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -66,8 +67,34 @@ export function ProjectDetailPage() {
     multiple: true,
     beforeUpload: () => false,
     fileList: selectedFiles,
-    onChange: ({ fileList }) => setSelectedFiles(fileList),
+    onChange: ({ fileList }) => {
+      setSelectedFiles(fileList);
+      setResumableBatch(null);
+      void findResumableBatch(fileList.map((item) => item.originFileObj).filter(Boolean) as File[]);
+    },
     showUploadList: true,
+  };
+
+  const findResumableBatch = async (localFiles: File[]) => {
+    if (!localFiles.length) return;
+    const expected = localFiles.map((file) => `${file.name}:${file.size}`).sort().join("|");
+    for (let index = 0; index < localStorage.length; index += 1) {
+      const key = localStorage.key(index);
+      if (!key?.startsWith("vision-capital-ai:batch:") || !key.endsWith(":manifest")) continue;
+      try {
+        const manifest = JSON.parse(localStorage.getItem(key) ?? "") as { batchId: string; files: string[] };
+        if (manifest.files.slice().sort().join("|") !== expected) continue;
+        const candidate = await getFileBatch(manifest.batchId);
+        if (candidate.status === "uploading") {
+          setBatchId(candidate.id);
+          setResumableBatch(candidate);
+          message.info("已恢复未完成的上传批次");
+          return;
+        }
+      } catch {
+        localStorage.removeItem(key);
+      }
+    }
   };
 
   const submitBatch = async () => {
@@ -76,7 +103,10 @@ export function ProjectDetailPage() {
     if (!localFiles.length) return;
     setSubmitting(true);
     try {
-      const batch = await createFileBatch(projectId, localFiles);
+      const batch = resumableBatch ?? await createFileBatch(projectId, localFiles);
+      if (!resumableBatch) {
+        localStorage.setItem(`vision-capital-ai:batch:${batch.id}:manifest`, JSON.stringify({ batchId: batch.id, files: localFiles.map((file) => `${file.name}:${file.size}`) }));
+      }
       setBatchId(batch.id);
       for (let index = 0; index < localFiles.length; index += 1) {
         const localFile = localFiles[index];
@@ -124,7 +154,9 @@ export function ProjectDetailPage() {
         }
       }
       await completeFileBatch(batch.id);
+      localStorage.removeItem(`vision-capital-ai:batch:${batch.id}:manifest`);
       setSelectedFiles([]);
+      setResumableBatch(null);
       message.success("批次已提交，解析正在后台进行");
       await load();
     } catch (error) {

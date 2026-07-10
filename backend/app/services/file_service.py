@@ -100,6 +100,7 @@ class FileService:
                 "files": files, "upload_sessions": []})
         batch.status = BatchStatus.queued
         self.db.commit()
+        queued_file_ids: list[str] = []
         for file in files:
             if not self.storage.object_exists(file.r2_object_key, file.size):
                 file.parse_status = ParseStatus.failed
@@ -110,13 +111,44 @@ class FileService:
                 file.parse_status = ParseStatus.pending
                 file.parse_stage = ParseStage.validate
                 file.progress = 10
-                if file.parse_status != ParseStatus.processing:
-                    parse_uploaded_file_task.delay(file.id)
+                queued_file_ids.append(file.id)
         self.db.commit()
+        from app.workers.tasks import _refresh_batch
+        _refresh_batch(self.db, batch.id)
+        for file_id in queued_file_ids:
+            parse_uploaded_file_task.delay(file_id)
         return BatchRead.model_validate({"id": batch.id, "project_id": batch.project_id,
             "total_files": batch.total_files, "completed_files": batch.completed_files,
             "failed_files": batch.failed_files, "progress": batch.progress, "status": batch.status,
             "files": files, "upload_sessions": []})
+
+    def get_batch(self, batch_id: str, user: User) -> BatchRead:
+        batch = self.db.get(DocumentBatch, batch_id)
+        if not batch or not self.project_repo.get_for_owner(batch.project_id, user.id):
+            raise HTTPException(status_code=404, detail="Batch not found")
+        files = list(self.db.query(ProjectFile).filter(ProjectFile.batch_id == batch.id).all())
+        sessions: list[UploadSession] = []
+        if batch.status == BatchStatus.uploading:
+            for file in files:
+                if file.multipart_upload_id:
+                    sessions.append(UploadSession(
+                        file_id=file.id, object_key=file.r2_object_key, upload_url=None,
+                        upload_mode="multipart", part_size=settings.upload_part_size_bytes,
+                        total_parts=(file.size + settings.upload_part_size_bytes - 1) // settings.upload_part_size_bytes,
+                        upload_id=file.multipart_upload_id,
+                    ))
+                else:
+                    sessions.append(UploadSession(
+                        file_id=file.id, object_key=file.r2_object_key,
+                        upload_url=self.storage.presign_upload_url(file.r2_object_key, file.content_type),
+                        upload_mode="direct" if settings.r2_enabled else "backend",
+                    ))
+        return BatchRead.model_validate({
+            "id": batch.id, "project_id": batch.project_id, "total_files": batch.total_files,
+            "completed_files": batch.completed_files, "failed_files": batch.failed_files,
+            "progress": batch.progress, "status": batch.status, "files": files,
+            "upload_sessions": sessions,
+        })
 
     def delete(self, file_id: str, user: User) -> None:
         file = self.file_repo.get(file_id)
@@ -150,7 +182,7 @@ class FileService:
 
     @staticmethod
     def _validate_filename(filename: str) -> None:
-        allowed = {"pdf", "docx", "xlsx", "xls", "csv", "txt", "md", "png", "jpg", "jpeg", "webp"}
+        allowed = {"pdf", "doc", "docx", "xlsx", "xls", "csv", "txt", "md", "png", "jpg", "jpeg", "webp"}
         suffix = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
         if not filename.strip() or suffix not in allowed:
             raise HTTPException(status_code=415, detail="Unsupported or missing file extension")

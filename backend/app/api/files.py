@@ -25,6 +25,11 @@ def complete_file_batch(batch_id: str, db: Session = Depends(get_db), user: User
     return FileService(db).complete_batch(batch_id, user)
 
 
+@router.get("/api/file-batches/{batch_id}", response_model=BatchRead)
+def get_file_batch(batch_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    return FileService(db).get_batch(batch_id, user)
+
+
 @router.post("/api/file-batches/{batch_id}/files/{file_id}/content", response_model=FileRead)
 def upload_batch_file_content(batch_id: str, file_id: str, upload_file: UploadFile = File(...), db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     service = FileService(db)
@@ -32,7 +37,9 @@ def upload_batch_file_content(batch_id: str, file_id: str, upload_file: UploadFi
     file = FileRepository(db).get(file_id)
     if not batch or not file or file.batch_id != batch_id or not ProjectRepository(db).get_for_owner(batch.project_id, user.id):
         raise HTTPException(status_code=404, detail="Batch file not found")
-    content = upload_file.file.read()
+    content = upload_file.file.read(file.size + 1)
+    if len(content) > file.size:
+        raise HTTPException(status_code=413, detail="Uploaded file exceeds the declared size")
     if len(content) != file.size:
         raise HTTPException(status_code=400, detail="Uploaded size does not match the declared size")
     service.storage.upload_file(file.r2_object_key, content, upload_file.content_type)
