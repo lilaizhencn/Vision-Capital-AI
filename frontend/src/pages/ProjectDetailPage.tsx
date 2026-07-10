@@ -112,9 +112,17 @@ export function ProjectDetailPage() {
         localStorage.setItem(`vision-capital-ai:batch:${batch.id}:manifest`, JSON.stringify({ batchId: batch.id, files: localFiles.map((file) => `${file.name}:${file.size}:${file.lastModified}`) }));
       }
       setBatchId(batch.id);
+      const availableFiles = new Map<string, typeof batch.files>();
+      for (const fileRecord of batch.files) {
+        const key = `${fileRecord.filename}:${fileRecord.size}`;
+        availableFiles.set(key, [...(availableFiles.get(key) ?? []), fileRecord]);
+      }
       for (let index = 0; index < localFiles.length; index += 1) {
         const localFile = localFiles[index];
-        const session = batch.upload_sessions[index];
+        const key = `${localFile.name}:${localFile.size}`;
+        const matchingFiles = availableFiles.get(key) ?? [];
+        const matchingFile = matchingFiles.shift();
+        const session = matchingFile ? batch.upload_sessions.find((item) => item.file_id === matchingFile.id) : undefined;
         if (!session || !localFile) throw new Error("上传会话与文件数量不一致");
         if (session.upload_mode === "direct" && session.upload_url) {
           try {

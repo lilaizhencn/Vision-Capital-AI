@@ -134,6 +134,15 @@ celery -A app.workers.celery_app.celery_app worker --loglevel=info
 
 浏览器直传使用 R2 presigned PUT / multipart URL。R2 bucket 需要允许实际前端来源的 `PUT`、`POST`、`GET`、`HEAD`、`DELETE`，并在 CORS `ExposeHeaders` 中暴露 `ETag`。如果 bucket 权限暂时不能配置 CORS，前端会在直传失败时自动切换到受 JWT 保护的后端分片兜底路径，文件仍然写入 R2。
 
+可参考 `docs/r2-cors.example.json` 配置 CORS（把 `https://app.example.com` 换成实际前端域名），并使用拥有 `s3:PutBucketCORS` 权限的 R2 token 执行：
+
+```bash
+aws s3api put-bucket-cors \
+  --bucket app-public \
+  --endpoint-url "$R2_ENDPOINT_URL" \
+  --cors-configuration file://docs/r2-cors.example.json
+```
+
 ## OpenAI / DeepSeek 配置说明
 
 - `LLM_BASE_URL` 可指向 OpenAI 官方地址，也可指向 DeepSeek 或其他 OpenAI-compatible 服务。
