@@ -90,7 +90,7 @@ jobs:
           done
           test "$status" = "completed"
 
-          curl --fail --silent --location https://samplefile.com/samples/download/image/png/png_receipt_scan_sample.png/ -o /tmp/vision-ci-receipt.png
+          curl --fail --silent --location https://raw.githubusercontent.com/tesseract-ocr/tessdoc/main/images/eurotext.png -o /tmp/vision-ci-receipt.png
           image_upload=$(curl --fail --silent -X POST "http://localhost:8000/api/projects/$project_id/files/upload" -H "Authorization: Bearer $token" -F upload_file=@/tmp/vision-ci-receipt.png)
           image_file_id=$(echo "$image_upload" | jq -r '.file.id')
           for attempt in $(seq 1 60); do
