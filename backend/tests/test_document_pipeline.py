@@ -105,6 +105,16 @@ def test_parser_delegates_images_to_ocr() -> None:
     assert result == "OCR result"
 
 
+def test_ocr_falls_back_to_local_tesseract_when_vision_provider_fails(monkeypatch) -> None:
+    from app.ai.ocr_service import OCRService
+
+    service = OCRService()
+    service.client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **_kwargs: (_ for _ in ()).throw(ValueError("vision unsupported")))))
+    monkeypatch.setattr(service, "_extract_local", lambda _data: "local OCR result")
+
+    assert service.extract(b"image-bytes", "image/png") == "local OCR result"
+
+
 def test_file_validation_rejects_unsupported_extensions() -> None:
     with pytest.raises(Exception):
         FileService._validate_filename("payload.exe")

@@ -137,6 +137,8 @@ celery -A app.workers.celery_app.celery_app worker --loglevel=info
 ## OpenAI / DeepSeek 配置说明
 
 - `LLM_BASE_URL` 可指向 OpenAI 官方地址，也可指向 DeepSeek 或其他 OpenAI-compatible 服务。
+- `LLM_MODEL` 用于文本抽取、问答和报告，`OCR_MODEL` 需要配置支持图片消息的视觉模型；DeepSeek 当前文本模型不接受图片消息。
+- Docker 后端内置 Tesseract（英文与简体中文语言包）。视觉模型不可用或不支持图片时，图片和扫描 PDF 会自动回退到本地 Tesseract OCR。
 - 如果 `LLM_API_KEY` 未配置，Embedding 与报告 / 问答生成会返回清晰错误，不会直接让服务崩溃。
 
 ## 常见问题
