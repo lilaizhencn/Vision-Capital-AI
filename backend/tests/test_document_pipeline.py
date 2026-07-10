@@ -2,6 +2,7 @@ from io import BytesIO
 
 import pandas as pd
 import pytest
+import fitz
 from types import SimpleNamespace
 from docx import Document
 from app.ai.llm_service import LLMService
@@ -72,6 +73,24 @@ def test_parser_extracts_excel_sheets() -> None:
 
     assert "Sheet: Metrics" in result
     assert "revenue" in result
+
+
+def test_parser_extracts_pdf_tables() -> None:
+    document = fitz.open()
+    page = document.new_page(width=300, height=200)
+    for y in (20, 60, 100):
+        page.draw_line(fitz.Point(20, y), fitz.Point(260, y), color=(0, 0, 0), width=1)
+    for x in (20, 140, 260):
+        page.draw_line(fitz.Point(x, 20), fitz.Point(x, 100), color=(0, 0, 0), width=1)
+    page.insert_text((30, 45), "Metric")
+    page.insert_text((150, 45), "Value")
+    page.insert_text((30, 85), "Revenue")
+    page.insert_text((150, 85), "100")
+
+    result = DocumentParserService().parse("table.pdf", "application/pdf", document.tobytes())
+
+    assert "PDF Table 1.1:" in result
+    assert "Revenue | 100" in result
 
 
 def test_parser_delegates_images_to_ocr() -> None:

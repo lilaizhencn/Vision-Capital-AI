@@ -31,6 +31,12 @@ class DocumentParserService:
     def _parse_pdf(self, data: bytes) -> str:
         reader = PdfReader(BytesIO(data))
         text = "\n".join(page.extract_text() or "" for page in reader.pages).strip()
+        tables = self._extract_pdf_tables(data)
+        table_text = "\n\n".join(tables)
+        if text and table_text:
+            return f"{text}\n\n{table_text}"
+        if table_text:
+            return table_text
         if text:
             return text
         try:
@@ -45,6 +51,21 @@ class DocumentParserService:
             image = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False).tobytes("png")
             pages.append(self.ocr_service.extract(image, "image/png"))
         return "\n\n".join(pages).strip()
+
+    @staticmethod
+    def _extract_pdf_tables(data: bytes) -> list[str]:
+        try:
+            import pdfplumber
+        except ImportError:
+            return []
+        tables: list[str] = []
+        with pdfplumber.open(BytesIO(data)) as document:
+            for page_index, page in enumerate(document.pages, start=1):
+                for table_index, table in enumerate(page.extract_tables(), start=1):
+                    rows = [" | ".join(cell or "" for cell in row) for row in table if row]
+                    if rows:
+                        tables.append(f"PDF Table {page_index}.{table_index}:\n" + "\n".join(rows))
+        return tables
 
     def _parse_docx(self, data: bytes) -> str:
         document = Document(BytesIO(data))
