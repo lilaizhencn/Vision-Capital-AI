@@ -11,8 +11,8 @@ class RAGService:
         self.embedding_service = EmbeddingService()
 
     def similarity_search(self, project_id: str, query: str, limit: int = 5) -> list[DocumentChunk]:
-        query_embedding = self.embedding_service.embed_text(query)
         try:
+            query_embedding = self.embedding_service.embed_text(query)
             statement = (
                 select(DocumentChunk)
                 .where(DocumentChunk.project_id == project_id, DocumentChunk.embedding.is_not(None))
@@ -31,4 +31,3 @@ class RAGService:
                 select(DocumentChunk).where(DocumentChunk.project_id == project_id).order_by(DocumentChunk.created_at.desc()).limit(limit)
             )
         )
-

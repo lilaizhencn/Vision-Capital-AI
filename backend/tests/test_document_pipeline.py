@@ -8,6 +8,7 @@ import fitz
 from types import SimpleNamespace
 from docx import Document
 from app.ai.llm_service import LLMService
+from app.ai.embedding_service import EmbeddingService
 from app.services.rag_service import RAGService
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -346,3 +347,27 @@ def test_project_dashboard_chat_and_report_flow(api_client, monkeypatch) -> None
 
     assert api_client.delete(f"/api/projects/{project_id}", headers=headers).status_code == 200
     assert api_client.get(f"/api/projects/{project_id}", headers=headers).status_code == 404
+
+
+def test_chat_falls_back_to_recent_chunks_when_embeddings_are_unavailable(api_client, monkeypatch) -> None:
+    monkeypatch.setattr(EmbeddingService, "embed_text", lambda _self, _text: (_ for _ in ()).throw(RuntimeError("embedding unavailable")))
+    monkeypatch.setattr(LLMService, "generate", lambda _self, _prompt: "fallback response")
+    token = api_client.post("/api/auth/register", json={"email": "rag@example.com", "username": "rag", "password": "strong-password"}).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    project_id = api_client.post(
+        "/api/projects",
+        headers=headers,
+        json={"name": "RAG QA", "company_name": "Acme", "industry": "SaaS", "stage": "Seed"},
+    ).json()["id"]
+    uploaded = api_client.post(
+        f"/api/projects/{project_id}/files/upload",
+        headers=headers,
+        files={"upload_file": ("notes.txt", b"Revenue grew 20 percent", "text/plain")},
+    )
+    assert uploaded.status_code == 200
+
+    response = api_client.post(f"/api/projects/{project_id}/chat", headers=headers, json={"message": "What grew?"})
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "fallback response"
+    assert response.json()["citations"][0]["filename"] == "notes.txt"
