@@ -19,6 +19,7 @@ export function ProjectDetailPage() {
   const [batchProgress, setBatchProgress] = useState(0);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [resuming, setResuming] = useState(false);
   const [chatting, setChatting] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [retryingFileId, setRetryingFileId] = useState<string | null>(null);
@@ -77,7 +78,8 @@ export function ProjectDetailPage() {
 
   const findResumableBatch = async (localFiles: File[]) => {
     if (!localFiles.length) return;
-    const expected = localFiles.map((file) => `${file.name}:${file.size}`).sort().join("|");
+    const expected = localFiles.map((file) => `${file.name}:${file.size}:${file.lastModified}`).sort().join("|");
+    setResuming(true);
     for (let index = 0; index < localStorage.length; index += 1) {
       const key = localStorage.key(index);
       if (!key?.startsWith("vision-capital-ai:batch:") || !key.endsWith(":manifest")) continue;
@@ -89,23 +91,25 @@ export function ProjectDetailPage() {
           setBatchId(candidate.id);
           setResumableBatch(candidate);
           message.info("已恢复未完成的上传批次");
+          setResuming(false);
           return;
         }
       } catch {
         localStorage.removeItem(key);
       }
     }
+    setResuming(false);
   };
 
   const submitBatch = async () => {
-    if (submitting) return;
+    if (submitting || resuming) return;
     const localFiles = selectedFiles.map((item) => item.originFileObj).filter(Boolean) as File[];
     if (!localFiles.length) return;
     setSubmitting(true);
     try {
       const batch = resumableBatch ?? await createFileBatch(projectId, localFiles);
       if (!resumableBatch) {
-        localStorage.setItem(`vision-capital-ai:batch:${batch.id}:manifest`, JSON.stringify({ batchId: batch.id, files: localFiles.map((file) => `${file.name}:${file.size}`) }));
+        localStorage.setItem(`vision-capital-ai:batch:${batch.id}:manifest`, JSON.stringify({ batchId: batch.id, files: localFiles.map((file) => `${file.name}:${file.size}:${file.lastModified}`) }));
       }
       setBatchId(batch.id);
       for (let index = 0; index < localFiles.length; index += 1) {
