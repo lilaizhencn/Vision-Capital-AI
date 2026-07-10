@@ -5,6 +5,7 @@ import socket
 import pandas as pd
 import pytest
 import fitz
+from PIL import Image
 from types import SimpleNamespace
 from docx import Document
 from app.ai.llm_service import LLMService
@@ -101,6 +102,28 @@ def test_parser_extracts_pdf_tables() -> None:
 
 def test_parser_delegates_images_to_ocr() -> None:
     result = DocumentParserService(ocr_service=FakeOCR()).parse("scan.png", "image/png", b"image-bytes")
+
+    assert result == "OCR result"
+
+
+@pytest.mark.parametrize(
+    ("filename", "content_type", "image_format"),
+    [("scan.jpg", "image/jpeg", "JPEG"), ("scan.webp", "image/webp", "WEBP")],
+)
+def test_parser_delegates_jpeg_and_webp_to_ocr(filename: str, content_type: str, image_format: str) -> None:
+    stream = BytesIO()
+    Image.new("RGB", (32, 32), "white").save(stream, format=image_format)
+
+    result = DocumentParserService(ocr_service=FakeOCR()).parse(filename, content_type, stream.getvalue())
+
+    assert result == "OCR result"
+
+
+def test_scanned_pdf_uses_ocr_when_no_text_layer() -> None:
+    document = fitz.open()
+    document.new_page(width=100, height=100)
+
+    result = DocumentParserService(ocr_service=FakeOCR()).parse("scan.pdf", "application/pdf", document.tobytes())
 
     assert result == "OCR result"
 
