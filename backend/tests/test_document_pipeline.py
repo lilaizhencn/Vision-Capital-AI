@@ -395,3 +395,18 @@ def test_chat_falls_back_to_recent_chunks_when_embeddings_are_unavailable(api_cl
     assert response.status_code == 200
     assert response.json()["answer"] == "fallback response"
     assert response.json()["citations"][0]["filename"] == "notes.txt"
+
+
+def test_llm_service_uses_openai_compatible_chat_completions(monkeypatch) -> None:
+    service = LLMService()
+    calls = {}
+
+    class FakeCompletions:
+        def create(self, **kwargs):
+            calls.update(kwargs)
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content="answer"))])
+
+    service.client = SimpleNamespace(chat=SimpleNamespace(completions=FakeCompletions()))
+
+    assert service.generate("test prompt") == "answer"
+    assert calls["messages"] == [{"role": "user", "content": "test prompt"}]

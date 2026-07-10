@@ -14,11 +14,12 @@ class LLMService:
     def generate(self, prompt: str) -> str:
         if not self.client:
             raise RuntimeError("LLM_API_KEY is not configured, LLM service is unavailable.")
-        response = self.client.responses.create(
+        response = self.client.chat.completions.create(
             model=settings.llm_model,
-            input=prompt,
+            temperature=0,
+            messages=[{"role": "user", "content": prompt}],
         )
-        return response.output_text
+        return response.choices[0].message.content or ""
 
     def extract_document_data(self, text: str) -> dict:
         """Extract stable investment fields and preserve malformed model output for review."""
