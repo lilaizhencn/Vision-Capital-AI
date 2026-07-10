@@ -219,24 +219,25 @@ def _fail_stage(db: Session, file_id: str, stage: ParseStage, exc: Exception, ta
     file = FileRepository(db).get(file_id)
     if not file:
         return
+    error_message = str(exc).replace("\x00", "")
     run = db.query(ParseStageRun).filter(ParseStageRun.file_id == file.id, ParseStageRun.stage == stage.value).one_or_none()
     if run:
         run.status = "failed"
-        run.error = str(exc)
+        run.error = error_message
     retries = getattr(getattr(task, "request", None), "retries", settings.max_parse_retries)
     retrying = isinstance(exc, RETRYABLE_ERRORS) and retries < settings.max_parse_retries
     file.parse_status = ParseStatus.processing if retrying else ParseStatus.failed
     file.parse_stage = stage
-    file.parse_error = f"Retry scheduled: {exc}" if retrying else str(exc)
+    file.parse_error = f"Retry scheduled: {error_message}" if retrying else error_message
     file.progress = 0 if not retrying else file.progress
     file.retry_count = (file.retry_count or 0) + 1
     if not retrying:
         dead_letter = db.query(ParseDeadLetter).filter(ParseDeadLetter.file_id == file.id).one_or_none()
         if dead_letter:
             dead_letter.attempts = file.retry_count
-            dead_letter.error = str(exc)
+            dead_letter.error = error_message
         else:
-            db.add(ParseDeadLetter(file_id=file.id, attempts=file.retry_count, error=str(exc)))
+            db.add(ParseDeadLetter(file_id=file.id, attempts=file.retry_count, error=error_message))
     db.commit()
     _refresh_batch(db, file.batch_id)
 

@@ -138,7 +138,7 @@ def test_virus_scanner_streams_clamav_protocol(monkeypatch) -> None:
             self.payload.extend(value)
 
         def recv(self, _size):
-            return b"stream: OK\n"
+            return b"stream: OK\x00"
 
     fake = FakeConnection()
     monkeypatch.setattr(settings, "virus_scan_enabled", True)

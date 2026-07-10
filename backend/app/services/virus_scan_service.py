@@ -32,7 +32,7 @@ class VirusScanner:
                     connection.sendall(len(chunk).to_bytes(4, "big"))
                     connection.sendall(chunk)
                 connection.sendall((0).to_bytes(4, "big"))
-                response = connection.recv(4096).decode("utf-8", errors="replace").strip()
+                response = connection.recv(4096).decode("utf-8", errors="replace").replace("\x00", "").strip()
         except OSError as exc:
             raise RuntimeError("Virus scanner is unavailable") from exc
         if not response.endswith("OK"):
