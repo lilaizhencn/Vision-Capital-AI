@@ -36,8 +36,9 @@ function GlobalAssistant({ open, onClose }: { open: boolean; onClose: () => void
   useEffect(() => {
     if (!open) return;
     void getProjects().then((items) => {
-      setProjects(items);
-      if (!projectId && items[0]) setProjectId(items[0].id);
+      const nextProjects = Array.isArray(items) ? items : [];
+      setProjects(nextProjects);
+      if (!projectId && nextProjects[0]) setProjectId(nextProjects[0].id);
     });
   }, [open, projectId]);
 
@@ -59,7 +60,7 @@ function GlobalAssistant({ open, onClose }: { open: boolean; onClose: () => void
       <div className="drawer-intro">
         <span className="eyebrow">CONTEXTUAL RESEARCH</span>
         <Typography.Title level={3}>把问题变成下一步行动</Typography.Title>
-        <Typography.Paragraph type="secondary">选择一个项目，AI 会基于项目资料回答，并返回可追溯的分析上下文。</Typography.Paragraph>
+        <Typography.Paragraph type="secondary">选择一个项目,AI 会基于项目资料回答,并返回可追溯的分析上下文。</Typography.Paragraph>
       </div>
       <Space direction="vertical" size={14} style={{ width: "100%" }}>
         <Select
@@ -73,7 +74,7 @@ function GlobalAssistant({ open, onClose }: { open: boolean; onClose: () => void
           rows={5}
           value={question}
           onChange={(event) => setQuestion(event.target.value)}
-          placeholder="例如：这个项目当前最大的现金流风险是什么？"
+          placeholder="例如:这个项目当前最大的现金流风险是什么?"
         />
         <Button type="primary" block loading={loading} disabled={!projectId || !question.trim()} onClick={() => void submit()}>
           开始分析

@@ -11,7 +11,7 @@ export function ReportsPage() {
 
   useEffect(() => {
     void getRecentReports()
-      .then(setReports)
+      .then((items) => setReports(Array.isArray(items) ? items : []))
       .catch((reason: any) => {
         const detail = reason?.response?.data?.detail ?? "无法加载报告列表";
         setError(detail);

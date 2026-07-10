@@ -12,7 +12,7 @@ export function AssistantPage() {
 
   useEffect(() => {
     void getProjects()
-      .then(setProjects)
+      .then((items) => setProjects(Array.isArray(items) ? items : []))
       .catch((reason: any) => message.error(reason?.response?.data?.detail ?? "无法加载项目列表"))
       .finally(() => setLoading(false));
   }, []);

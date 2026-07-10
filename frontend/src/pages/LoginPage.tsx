@@ -20,7 +20,7 @@ export function LoginPage() {
     <div className="auth-page">
       <Card className="auth-card">
         <Typography.Title level={2}>欢迎回来</Typography.Title>
-        <Typography.Paragraph>登录 Vision Capital AI，继续你的投研工作流。</Typography.Paragraph>
+        <Typography.Paragraph>登录 Vision Capital AI,继续你的投研工作流。</Typography.Paragraph>
         <Form layout="vertical" onFinish={onFinish}>
           <Form.Item label="Email" name="email" rules={[{ required: true }]}>
             <Input />
@@ -39,4 +39,3 @@ export function LoginPage() {
     </div>
   );
 }
-

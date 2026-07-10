@@ -23,7 +23,7 @@ export function DashboardPage() {
   return (
     <div className="page-stack workspace-page">
       <section className="workspace-welcome">
-        <div><span className="eyebrow">TUESDAY · 20 MAY 2025</span><Typography.Title level={1}>下午好，李正宇</Typography.Title><Typography.Paragraph>把握信息优势，做更好的投资决策。</Typography.Paragraph></div>
+        <div><span className="eyebrow">TUESDAY · 20 MAY 2025</span><Typography.Title level={1}>下午好,李正宇</Typography.Title><Typography.Paragraph>把握信息优势,做更好的投资决策。</Typography.Paragraph></div>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate("/projects")}>新建投资项目</Button>
       </section>
       <Row gutter={[14, 14]} className="metric-row">
@@ -43,12 +43,12 @@ export function DashboardPage() {
             </div>
           </Card>
           <Card className="workspace-panel featured-project-panel" title="重点项目" extra={<Button type="link" onClick={() => navigate("/projects")}>查看全部 <ArrowRightOutlined /></Button>}>
-            {featured ? <FeaturedProject project={featured} onOpen={() => navigate(`/projects/${featured.id}`)} /> : <Empty description="创建第一个投资项目，开始构建你的投研工作台" />} 
+            {featured ? <FeaturedProject project={featured} onOpen={() => navigate(`/projects/${featured.id}`)} /> : <Empty description="创建第一个投资项目,开始构建你的投研工作台" />}
           </Card>
         </Col>
         <Col xs={24} xl={8}>
           <Card className="workspace-panel insight-panel" title="AI 今日洞察" extra={<Button type="link" onClick={() => navigate("/assistant")}>更多 <ArrowRightOutlined /></Button>}>
-            <List size="small" dataSource={projects.slice(0, 3)} locale={{ emptyText: "项目资料解析后，AI 洞察会出现在这里" }} renderItem={(project, index) => <List.Item><List.Item.Meta avatar={<span className={`insight-icon insight-${index}`}>{index === 0 ? "◒" : index === 1 ? "⌁" : "!"}</span>} title={index === 0 ? `${project.name} 资料解析完成` : `${project.name} 需要补充信息`} description={index === 0 ? "2 小时前 · 已建立知识索引" : "等待更多资料进入项目空间"} /></List.Item>} />
+            <List size="small" dataSource={projects.slice(0, 3)} locale={{ emptyText: "项目资料解析后,AI 洞察会出现在这里" }} renderItem={(project, index) => <List.Item><List.Item.Meta avatar={<span className={`insight-icon insight-${index}`}>{index === 0 ? "◒" : index === 1 ? "⌁" : "!"}</span>} title={index === 0 ? `${project.name} 资料解析完成` : `${project.name} 需要补充信息`} description={index === 0 ? "2 小时前 · 已建立知识索引" : "等待更多资料进入项目空间"} /></List.Item>} />
           </Card>
           <Card className="workspace-panel todo-panel" title="待办事项" extra={<Button type="link">更多</Button>}>
             <TodoRow done={false} text={featured ? `查看 ${featured.name} 的项目资料` : "创建第一个投资项目"} />

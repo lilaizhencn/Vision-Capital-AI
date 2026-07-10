@@ -9,7 +9,7 @@ export function RiskMonitoringPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    void getProjects().then(setProjects).catch((error: any) => message.error(error?.response?.data?.detail ?? "无法加载风险监控")).finally(() => setLoading(false));
+    void getProjects().then((items) => setProjects(Array.isArray(items) ? items : [])).catch((error: any) => message.error(error?.response?.data?.detail ?? "无法加载风险监控")).finally(() => setLoading(false));
   }, []);
 
   return (
@@ -21,7 +21,7 @@ export function RiskMonitoringPage() {
         <Col xs={24} sm={8}><Card className="metric-card"><Statistic title="本周新增信号" value={projects.length ? 4 : 0} suffix="条" /></Card></Col>
       </Row>
       <Card className="workspace-panel" title="风险事件">
-        {!loading && !projects.length ? <Empty description="创建项目后，风险信号会在这里汇总" /> : <List dataSource={projects.slice(0, 5)} renderItem={(project, index) => <List.Item actions={[<Button type="link" href={`/projects/${project.id}`}>查看项目</Button>]}><List.Item.Meta title={<SpaceRiskTitle project={project} index={index} />} description={index === 0 ? "AI 建议优先检查近期现金流和客户集中度变化" : "等待更多项目资料完成解析后更新"} /></List.Item>} />}
+        {!loading && !projects.length ? <Empty description="创建项目后,风险信号会在这里汇总" /> : <List dataSource={projects.slice(0, 5)} renderItem={(project, index) => <List.Item actions={[<Button type="link" href={`/projects/${project.id}`}>查看项目</Button>]}><List.Item.Meta title={<SpaceRiskTitle project={project} index={index} />} description={index === 0 ? "AI 建议优先检查近期现金流和客户集中度变化" : "等待更多项目资料完成解析后更新"} /></List.Item>} />}
       </Card>
       <Alert type="info" showIcon message="风险中心会随着项目资料、AI 分析和报告更新自动刷新。" />
     </div>
