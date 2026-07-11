@@ -20,4 +20,8 @@ celery_app.conf.beat_schedule = {
         "task": "schedule_due_project_research_task",
         "schedule": 600.0,
     },
+    "recover-stale-document-parses": {
+        "task": "recover_stale_parse_tasks_task",
+        "schedule": 600.0,
+    },
 }

@@ -1,6 +1,7 @@
 from io import BytesIO
 import hashlib
 import socket
+from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 import pytest
@@ -98,6 +99,37 @@ def test_parser_extracts_pdf_tables() -> None:
 
     assert "PDF Table 1.1:" in result
     assert "Revenue | 100" in result
+
+
+def test_large_pdf_table_extraction_samples_bounded_pages(monkeypatch) -> None:
+    import sys
+
+    visited: list[int] = []
+
+    class FakePage:
+        def __init__(self, index: int):
+            self.index = index
+
+        def extract_tables(self):
+            visited.append(self.index)
+            return []
+
+    class FakeDocument:
+        pages = [FakePage(index) for index in range(200)]
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    monkeypatch.setattr(settings, "pdf_table_max_pages", 10)
+    monkeypatch.setitem(sys.modules, "pdfplumber", SimpleNamespace(open=lambda _source: FakeDocument()))
+
+    assert DocumentParserService._extract_pdf_tables(b"%PDF") == []
+    assert len(visited) == 10
+    assert visited[0] == 0
+    assert visited[-1] == 199
 
 
 def test_parser_delegates_images_to_ocr() -> None:
@@ -493,6 +525,9 @@ def test_research_trust_allowlist_rejects_lookalike_domains() -> None:
     assert ResearchService._is_trusted_domain("www.sec.gov")
     assert ResearchService._is_trusted_domain("documents1.worldbank.org")
     assert ResearchService._is_trusted_domain("www.irena.org")
+    assert ResearchService._is_trusted_domain("www.federalreserve.gov")
+    assert ResearchService._is_trusted_domain("tsapps.nist.gov")
+    assert ResearchService._is_trusted_domain("www.census.gov")
     assert not ResearchService._is_trusted_domain("sec.gov.attacker.example")
     assert not ResearchService._is_trusted_domain("example.com")
 
@@ -508,6 +543,22 @@ def test_research_relevance_rejects_authoritative_but_unrelated_results() -> Non
     broad_project = SimpleNamespace(company_name="Snowflake Inc.", industry="Enterprise software and AI data cloud")
     assert not ResearchService._content_is_relevant(broad_project, "market", "Enterprise survey overview")
     assert ResearchService._content_is_relevant(broad_project, "market", "Enterprise software and cloud market outlook")
+
+
+def test_sec_research_rejects_stale_and_valuation_filings() -> None:
+    from app.services.research_service import ResearchService
+
+    year = datetime.now(timezone.utc).year
+    current = f"Walmart Inc. Annual Report on Form 10-K for {year}"
+    assert ResearchService._sec_document_is_current_filing("business", f"https://www.sec.gov/{year}/report.htm", current)
+    assert not ResearchService._sec_document_is_current_filing("business", "https://www.sec.gov/2017/report.htm", "Form 10-K 2017")
+    assert not ResearchService._sec_document_is_current_filing("valuation", f"https://www.sec.gov/{year}/424b2.htm", current)
+
+
+def test_rag_company_match_normalizes_legal_suffixes() -> None:
+    assert RAGService._same_company("JPMorgan Chase & Co.", "JPMorganChase")
+    assert RAGService._same_company("Caterpillar Inc.", "Caterpillar Incorporated")
+    assert not RAGService._same_company("Caterpillar Inc.", "Royal Bank of Canada")
 
 
 def test_monitoring_updates_are_persisted_and_owner_scoped(api_client) -> None:
@@ -592,6 +643,49 @@ def test_persist_stage_tolerates_embedding_provider_errors(api_client, monkeypat
     assert file_item["progress"] == 100
 
 
+def test_stale_parse_stage_is_automatically_requeued(monkeypatch) -> None:
+    from app.models.file import ParseStage, ParseStageRun, ParseStatus, ProjectFile
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    TestSession = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+    with TestSession() as db:
+        file = ProjectFile(
+            project_id="project-1",
+            filename="interrupted.pdf",
+            content_type="application/pdf",
+            size=100,
+            r2_object_key="tenants/owner/project/interrupted.pdf",
+            parse_status=ParseStatus.processing,
+            parse_stage=ParseStage.ocr,
+            progress=20,
+        )
+        db.add(file)
+        db.flush()
+        db.add(ParseStageRun(
+            file_id=file.id,
+            stage=ParseStage.ocr.value,
+            idempotency_key=f"single:{file.id}:ocr",
+            status="running",
+            attempts=1,
+            started_at=datetime.now(timezone.utc) - timedelta(minutes=31),
+        ))
+        db.commit()
+        file_id = file.id
+
+    requeued: list[str] = []
+    monkeypatch.setattr(tasks, "SessionLocal", TestSession)
+    monkeypatch.setattr(settings, "parse_stale_after_minutes", 30)
+    monkeypatch.setattr(tasks.parse_uploaded_file_task, "delay", lambda value: requeued.append(value))
+
+    assert tasks.recover_stale_parse_tasks_task.run() == {"recovered": 1}
+    assert requeued == [file_id]
+    with TestSession() as db:
+        recovered = db.get(ProjectFile, file_id)
+        assert recovered.parse_status == ParseStatus.pending
+        assert "Recovering" in recovered.parse_error
+
+
 def test_llm_service_uses_openai_compatible_chat_completions(monkeypatch) -> None:
     service = LLMService()
     calls = {}
@@ -627,13 +721,24 @@ def test_strategy_numeric_guard_removes_values_absent_from_evidence() -> None:
     assert "保持定性观察" in guarded
 
 
+def test_strategy_guard_removes_invented_consecutive_period_exit_rules() -> None:
+    from app.services.chat_service import ChatService
+
+    answer = "保留证据核验动作。连续两个季度未达预期则触发退出。继续跟踪原始披露。"
+    guarded = ChatService._remove_unsupported_numeric_lines(answer, ["Company reported quarterly results."])
+
+    assert "连续两个季度" not in guarded
+    assert "保留证据核验动作" in guarded
+    assert "继续跟踪原始披露" in guarded
+
+
 def test_strategy_answer_falls_back_when_evidence_control_does_not_pass() -> None:
     from app.services.chat_service import ChatService
 
     service = ChatService.__new__(ChatService)
     service.llm_service = SimpleNamespace(generate=lambda _prompt: '{"revised_answer":"Unsupported claim","removed_or_reframed_claims":[],"evidence_control_passed":false}')
 
-    answer, passed = service._ground_strategy_answer(
+    answer, passed, issues = service._ground_strategy_answer(
         SimpleNamespace(company_name="Acme", industry="SaaS", stage="Seed"),
         "investment strategy",
         ["[filing.txt] Revenue was 120."],
@@ -641,22 +746,77 @@ def test_strategy_answer_falls_back_when_evidence_control_does_not_pass() -> Non
     )
 
     assert passed is False
+    assert issues
     assert "Unsupported claim" not in answer
     assert "Audited financial statements are missing" in answer
 
 
 def test_strategy_answer_requires_explicit_true_evidence_control() -> None:
+    import json
+
     from app.services.chat_service import ChatService
 
     service = ChatService.__new__(ChatService)
-    service.llm_service = SimpleNamespace(generate=lambda _prompt: '{"revised_answer":"Revenue was 120 [filing.txt]","removed_or_reframed_claims":[],"evidence_control_passed":true}')
+    staged_answer = """
+## IC Summary
+Company-disclosed facts are drawn from [filing.txt]. Analyst inference remains conditional on verification.
+## Pre-Investment
+Company-disclosed fact: revenue is documented in [filing.txt]. Analyst inference: quality cannot assess without reconciliation. Verification action: reconcile audited revenue to the source ledger. IC gate: the committee sets its acceptance threshold after the mandate is documented. Cannot assess valuation.
+## During-Investment
+Company-disclosed fact: the filing identifies the business. Analyst inference: execution remains conditional. Verification action: verify the transaction field against [terms.txt]. IC gate: approve only after legal and financial fields reconcile. Cannot assess position size.
+## Post-Investment
+Company-disclosed fact: the filing defines reporting fields. Analyst inference: monitoring can use verified fields. Verification action: reconcile each reporting period to [filing.txt]. IC gate: escalation thresholds must be set by the committee. Cannot assess exit timing.
+## Evidence Gaps
+Obtain the named ledger fields and signed terms. Do not infer missing values.
+""".strip()
+    staged_answer += "\n" + "Verification remains tied to primary evidence and no threshold is invented. " * 8
+    service.llm_service = SimpleNamespace(generate=lambda _prompt: json.dumps({
+        "revised_answer": staged_answer,
+        "removed_or_reframed_claims": [],
+        "evidence_control_passed": True,
+    }))
 
-    answer, passed = service._ground_strategy_answer(
+    answer, passed, issues = service._ground_strategy_answer(
         SimpleNamespace(company_name="Acme", industry="SaaS", stage="Seed"),
         "investment strategy",
-        ["[filing.txt] Revenue was 120."],
+        ["[filing.txt] Revenue was documented.", "[terms.txt] Transaction fields were documented."],
         [],
     )
 
     assert passed is True
-    assert "Revenue was 120" in answer
+    assert issues == []
+    assert "IC Summary" in answer
+
+
+def test_strategy_structure_gate_rejects_generic_short_answers() -> None:
+    from app.services.chat_service import ChatService
+
+    issues = ChatService._strategy_structure_issues("The evidence is insufficient. Request more documents.", ["[filing.txt] facts"])
+
+    assert "pre-investment" in issues
+    assert "IC gate" in issues
+    assert "answer too short for a staged IC work plan" in issues
+
+
+def test_strategy_answer_gets_one_repair_attempt(monkeypatch) -> None:
+    from app.services.chat_service import ChatService
+
+    responses = iter([
+        '{"revised_answer":"draft","removed_or_reframed_claims":[],"evidence_control_passed":false}',
+        '{"revised_answer":"repaired answer [filing.txt]","removed_or_reframed_claims":["draft"],"evidence_control_passed":true}',
+        '{"revised_answer":"repaired answer [filing.txt]","unsupported_or_overreaching_claims":[],"evidence_control_passed":true}',
+    ])
+    service = ChatService.__new__(ChatService)
+    service.llm_service = SimpleNamespace(generate=lambda _prompt: next(responses))
+    monkeypatch.setattr(ChatService, "_strategy_structure_issues", staticmethod(lambda answer, _context: [] if "repaired" in answer else ["quality"]))
+
+    answer, passed, issues = service._ground_strategy_answer(
+        SimpleNamespace(company_name="Acme", industry="SaaS", stage="Seed"),
+        "pre-investment strategy",
+        ["[filing.txt] Evidence"],
+        ["Customer evidence is missing"],
+    )
+
+    assert passed is True
+    assert issues == []
+    assert answer == "repaired answer [filing.txt]"

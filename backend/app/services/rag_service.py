@@ -1,9 +1,12 @@
+import re
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ai.embedding_service import EmbeddingService
 from app.models.chunk import DocumentChunk
 from app.models.file import ProjectFile
+from app.models.project import Project
 
 
 class RAGService:
@@ -33,24 +36,36 @@ class RAGService:
             )
         )
 
-    def investment_strategy_search(self, project_id: str, query: str, limit: int = 12) -> list[DocumentChunk]:
+    def investment_strategy_search(self, project_id: str, query: str, limit: int = 24) -> list[DocumentChunk]:
         """Gather a broader evidence pack for investment-stage strategy questions."""
         candidates: list[DocumentChunk] = []
         seen: set[str] = set()
         file_counts: dict[str, int] = {}
-        source_kinds = dict(self.db.execute(
-            select(ProjectFile.id, ProjectFile.source_kind).where(ProjectFile.project_id == project_id)
-        ).all())
+        file_metadata = {
+            file_id: (source_kind, extracted_data or {})
+            for file_id, source_kind, extracted_data in self.db.execute(
+                select(ProjectFile.id, ProjectFile.source_kind, ProjectFile.extracted_data)
+                .where(ProjectFile.project_id == project_id)
+            )
+        }
+        project_company = self.db.scalar(select(Project.company_name).where(Project.id == project_id)) or ""
 
         lowered = query.lower()
         skip_accounting_investments = any(marker in lowered for marker in ("投中", "交易", "投委", "仓位", "估值", "during"))
 
-        def add(items: list[DocumentChunk]) -> None:
+        def add(items: list[DocumentChunk], per_query_file_limit: int = 2) -> None:
+            query_file_counts: dict[str, int] = {}
             for item in items:
                 if item.id in seen:
                     continue
-                per_file_limit = 2 if source_kinds.get(item.file_id) == "public_research" else 8
+                source_kind, extracted_data = file_metadata.get(item.file_id, ("upload", {}))
+                extracted_company = extracted_data.get("company") if isinstance(extracted_data, dict) else None
+                if source_kind == "public_research" and extracted_company and not self._same_company(project_company, extracted_company):
+                    continue
+                per_file_limit = 3 if source_kind == "public_research" else 6
                 if file_counts.get(item.file_id, 0) >= per_file_limit:
+                    continue
+                if query_file_counts.get(item.file_id, 0) >= per_query_file_limit:
                     continue
                 item_text = item.content.lower()
                 if skip_accounting_investments and any(term in item_text for term in (
@@ -62,31 +77,48 @@ class RAGService:
                     continue
                 seen.add(item.id)
                 file_counts[item.file_id] = file_counts.get(item.file_id, 0) + 1
+                query_file_counts[item.file_id] = query_file_counts.get(item.file_id, 0) + 1
                 candidates.append(item)
 
-        if any(marker in lowered for marker in ("投中", "交易", "投委", "仓位", "估值", "during")):
-            terms = ["revenue", "gross margin", "remaining performance obligations", "competition", "risk factors", "cash flow", "customers", "consumption-based"]
-        elif any(marker in lowered for marker in ("投后", "持有", "kpi", "退出", "post")):
-            terms = ["revenue", "customers", "gross margin", "cash flow", "debt", "cybersecurity", "AI", "risk factors"]
-        else:
-            terms = ["ITEM 1. BUSINESS", "revenue", "customers", "competition", "risk factors", "gross margin", "remaining performance obligations"]
+        terms = [
+            "ITEM 1. BUSINESS", "business segments", "revenue", "net income", "cash flow",
+            "balance sheet", "customers", "competition", "risk factors", "management",
+            "regulation", "industry", "market", "consumer spending", "financial stability",
+            "manufacturing economy",
+        ]
 
         for term in terms:
             statement = (
                 select(DocumentChunk)
                 .where(DocumentChunk.project_id == project_id, DocumentChunk.content.ilike(f"%{term}%"))
                 .order_by(DocumentChunk.chunk_index.asc())
-                .limit(limit)
+                .limit(6)
             )
-            add(list(self.db.scalars(statement)))
+            add(list(self.db.scalars(statement)), per_query_file_limit=1)
             if len(candidates) >= limit:
                 break
 
         add(self.similarity_search(
             project_id,
-            "business model revenue growth gross margin customers remaining performance obligations competition risks cash flow AI product strategy",
+            "business model segments revenue earnings cash flow balance sheet customers competition management regulation industry market risks",
             limit=limit,
         ))
         add(self.similarity_search(project_id, query, limit=limit))
 
         return candidates[:limit]
+
+    @classmethod
+    def _same_company(cls, project_company: str, extracted_company: str) -> bool:
+        left = cls._normalize_company(project_company)
+        right = cls._normalize_company(extracted_company)
+        return len(left) >= 4 and len(right) >= 4 and (left in right or right in left)
+
+    @staticmethod
+    def _normalize_company(value: str) -> str:
+        value = re.sub(
+            r"\b(incorporated|corporation|company|limited|holdings?|group|inc|corp|co|ltd|llc|plc)\.?\b",
+            " ",
+            value,
+            flags=re.IGNORECASE,
+        )
+        return re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "", value.lower())

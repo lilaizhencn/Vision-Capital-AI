@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     upload_part_size_bytes: int = 8 * 1024 * 1024
     max_upload_size_bytes: int = 1024 * 1024 * 1024
     max_parse_retries: int = 3
+    parse_stale_after_minutes: int = 30
+    parse_recovery_batch_size: int = 100
     virus_scan_enabled: bool = False
     virus_scan_host: str = "clamav"
     virus_scan_port: int = 3310
@@ -40,6 +42,9 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
     ocr_model: str = "gpt-4o-mini"
     ocr_max_pages: int = 20
+    pdf_table_max_pages: int = 40
+    pdf_table_max_tables: int = 100
+    pdf_table_max_characters: int = 500_000
 
     research_enabled: bool = True
     research_max_sources_per_run: int = 8

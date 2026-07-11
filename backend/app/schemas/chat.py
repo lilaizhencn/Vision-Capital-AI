@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ChatRequest(BaseModel):
@@ -14,6 +14,7 @@ class Citation(BaseModel):
     source_kind: str = "upload"
     source_url: str | None = None
     source_quality: str | None = None
+    document_role: str = "uploaded_evidence"
 
 
 class ChatResponse(BaseModel):
@@ -22,6 +23,7 @@ class ChatResponse(BaseModel):
     confidence: str
     missing_evidence: list[str]
     evidence_control_passed: bool | None = None
+    quality_issues: list[str] = Field(default_factory=list)
 
 
 class ChatMessageRead(BaseModel):

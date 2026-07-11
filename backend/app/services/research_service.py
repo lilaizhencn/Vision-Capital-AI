@@ -26,20 +26,21 @@ from app.storage.storage_service import get_storage_service
 
 
 EVIDENCE_CATEGORIES = (
-    ("business", "商业模式与产品", ("business model", "product", "revenue model", "商业模式", "产品"), "高", "BP、产品手册或年度报告"),
-    ("financial", "财务表现与现金流", ("revenue", "gross margin", "cash flow", "balance sheet", "收入", "毛利", "现金流"), "高", "近三年审计报告、月度财务报表和预测模型"),
-    ("market", "市场空间与行业趋势", ("market size", "industry outlook", "tam", "市场规模", "行业趋势"), "中", "权威行业报告或政府统计数据"),
-    ("competition", "竞争格局", ("competition", "competitor", "market share", "竞争", "市场份额"), "高", "竞品清单、市场份额及客户访谈"),
-    ("team", "核心团队与治理", ("management", "director", "founder", "governance", "管理层", "创始人", "公司治理"), "高", "管理团队履历、组织架构和董事会材料"),
-    ("legal", "法律合规与知识产权", ("litigation", "regulation", "patent", "compliance", "诉讼", "合规", "专利"), "高", "法律尽调报告、诉讼清单和知识产权清单"),
-    ("customers", "客户与商业验证", ("customer", "contract", "retention", "客户", "合同", "留存"), "高", "客户明细、核心合同和访谈纪要"),
-    ("valuation", "估值与交易条款", ("valuation", "enterprise value", "term sheet", "估值", "交易条款"), "高", "最新估值基准、可比公司数据和交易文件"),
+    ("business", "商业模式与产品", ("business model", "product", "revenue model", "商业模式", "产品"), "高", "产品级收入拆分、定价与单位经济性、管理层访谈纪要"),
+    ("financial", "财务表现与现金流", ("revenue", "gross margin", "cash flow", "balance sheet", "收入", "毛利", "现金流"), "高", "最新季度报表、预算差异、债务与现金流明细、预测模型"),
+    ("market", "市场空间与行业趋势", ("market size", "industry outlook", "tam", "市场规模", "行业趋势"), "中", "公司细分市场定义、第三方规模数据与市场份额映射"),
+    ("competition", "竞争格局", ("competition", "competitor", "market share", "竞争", "市场份额"), "高", "产品级竞品对标、可比公司口径、市场份额与客户访谈"),
+    ("team", "核心团队与治理", ("management", "director", "founder", "governance", "管理层", "创始人", "公司治理"), "高", "关键管理层履历、组织职责、董事会与激励约束材料"),
+    ("legal", "法律合规与知识产权", ("litigation", "regulation", "patent", "compliance", "诉讼", "合规", "专利"), "高", "重大诉讼进展、监管检查、许可与核心知识产权清单"),
+    ("customers", "客户与商业验证", ("customer", "contract", "retention", "客户", "合同", "留存"), "高", "客户集中度、留存与续约、核心合同及独立客户访谈"),
+    ("valuation", "估值与交易条款", ("valuation", "enterprise value", "term sheet", "估值", "交易条款"), "高", "实时市场价格、可比公司口径、投资授权与拟议交易条款"),
 )
 
 TRUSTED_DOMAINS = (
     "sec.gov", "worldbank.org", "imf.org", "oecd.org", "who.int", "fda.gov", "europa.eu",
     "gov.cn", "stats.gov.cn", "samr.gov.cn", "cninfo.com.cn", "sse.com.cn", "szse.cn", "hkexnews.hk",
-    "energy.gov", "nrel.gov", "iea.org", "irena.org",
+    "energy.gov", "nrel.gov", "iea.org", "irena.org", "federalreserve.gov", "nist.gov",
+    "census.gov", "bea.gov", "bls.gov", "ftc.gov",
 )
 
 SEARCH_TERMS = {
@@ -174,6 +175,8 @@ class ResearchService:
             snippet = str(result.get("body") or "")[:4000]
             domain = (urlparse(url).hostname or "").lower()
             trusted = expected_trusted and self._is_trusted_domain(domain)
+            if trusted and gap.category == "valuation" and self._is_sec_domain(domain):
+                trusted = False
             if trusted and not self._result_is_relevant(project, gap.category, result):
                 continue
             source = ResearchSource(
@@ -206,6 +209,12 @@ class ResearchService:
     def _trusted_query(self, project: Project, category: str) -> str:
         industry = project.industry.lower()
         if category == "market":
+            if any(term in industry for term in ("bank", "financial", "fintech", "insurance", "asset management")):
+                return f'site:federalreserve.gov "financial stability" {project.industry} filetype:pdf'
+            if any(term in industry for term in ("manufactur", "industrial", "machinery", "construction equipment")):
+                return f'site:nist.gov "manufacturing economy" {project.industry} filetype:pdf'
+            if any(term in industry for term in ("retail", "consumer", "commerce", "grocery")):
+                return f'site:census.gov OR site:bea.gov "consumer spending" {project.industry}'
             if any(term in industry for term in ("bio", "pharma", "health")):
                 return f'site:fda.gov "{project.company_name}" industry report filetype:pdf'
             if any(term in industry for term in ("energy", "solar", "power")):
@@ -248,8 +257,13 @@ class ResearchService:
             stored_type = "text/plain"
         else:
             raise ValueError(f"Unsupported research content type: {content_type or 'unknown'}")
-        if not self._content_is_relevant(project, source.evidence_category, readable_text if stored_type == "application/pdf" else text):
+        readable_content = readable_text if stored_type == "application/pdf" else text
+        if not self._content_is_relevant(project, source.evidence_category, readable_content):
             raise ValueError("Official source does not contain enough project-relevant evidence")
+        if self._is_sec_domain(source.domain) and not self._sec_document_is_current_filing(
+            source.evidence_category, source.url, readable_content
+        ):
+            raise ValueError("SEC source is stale or is not a current company filing")
         key = f"tenants/{owner_id}/{project.id}/research/{uuid.uuid4()}{Path(filename).suffix}"
         stored = get_storage_service().upload_file(key, stored_content, stored_type)
         file = ProjectFile(
@@ -311,7 +325,7 @@ class ResearchService:
     @classmethod
     def _company_aliases(cls, company_name: str) -> set[str]:
         base = re.sub(
-            r"\b(incorporated|corporation|company|limited|holdings?|group|inc|corp|ltd|llc|plc)\.?\b",
+            r"\b(incorporated|corporation|company|limited|holdings?|group|inc|corp|co|ltd|llc|plc)\.?\b",
             " ",
             company_name,
             flags=re.IGNORECASE,
@@ -328,6 +342,22 @@ class ResearchService:
                 return "\n".join(document.load_page(index).get_text("text") for index in range(min(20, document.page_count)))
         except Exception as exc:
             raise ValueError("Official PDF could not be inspected for relevance") from exc
+
+    @staticmethod
+    def _is_sec_domain(domain: str) -> bool:
+        return domain == "sec.gov" or domain.endswith(".sec.gov")
+
+    @staticmethod
+    def _sec_document_is_current_filing(category: str, url: str, content: str) -> bool:
+        if category == "valuation":
+            return False
+        lowered = content.lower()
+        allowed_filing = any(marker in lowered for marker in (
+            "form 10-k", "form 10-q", "annual report", "proxy statement", "earnings release",
+        ))
+        current_year = datetime.now(timezone.utc).year
+        recent = any(str(year) in url or str(year) in lowered[:50_000] for year in range(current_year - 2, current_year + 1))
+        return allowed_filing and recent
 
     @staticmethod
     def _hash_url(url: str) -> str:

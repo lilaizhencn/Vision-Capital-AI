@@ -140,6 +140,50 @@ def schedule_due_project_research_task() -> dict[str, int]:
         db.close()
 
 
+@celery_app.task(name="recover_stale_parse_tasks_task")
+def recover_stale_parse_tasks_task() -> dict[str, int]:
+    """Requeue parse stages orphaned by a worker or machine interruption."""
+    db = SessionLocal()
+    recovered: list[str] = []
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(minutes=settings.parse_stale_after_minutes)
+        files = list(db.scalars(
+            select(ProjectFile)
+            .where(ProjectFile.parse_status == ParseStatus.processing)
+            .order_by(ProjectFile.created_at)
+            .limit(settings.parse_recovery_batch_size)
+        ))
+        for file in files:
+            run = db.scalar(
+                select(ParseStageRun).where(
+                    ParseStageRun.file_id == file.id,
+                    ParseStageRun.stage == file.parse_stage.value,
+                    ParseStageRun.status == "running",
+                    ParseStageRun.started_at < cutoff,
+                )
+            )
+            if not run:
+                continue
+            run.status = "failed"
+            run.error = "Stage was interrupted and automatically requeued"
+            file.parse_status = ParseStatus.pending
+            file.parse_error = "Recovering an interrupted parse stage"
+            recovered.append(file.id)
+        db.commit()
+        for file_id in recovered:
+            try:
+                parse_uploaded_file_task.delay(file_id)
+            except Exception as exc:
+                file = db.get(ProjectFile, file_id)
+                if file:
+                    file.parse_status = ParseStatus.failed
+                    file.parse_error = f"Unable to requeue interrupted parse: {exc}"[:2000]
+                    db.commit()
+        return {"recovered": len(recovered)}
+    finally:
+        db.close()
+
+
 @celery_app.task(bind=True, name="validate_uploaded_file_task", autoretry_for=RETRYABLE_ERRORS, retry_backoff=True, retry_backoff_max=120, retry_kwargs={"max_retries": settings.max_parse_retries})
 def validate_uploaded_file_task(self, file_id: str):
     db = SessionLocal()
@@ -303,6 +347,7 @@ def _begin_stage(db: Session, file_id: str, stage: ParseStage) -> ProjectFile | 
         run.status = "running"
         run.attempts += 1
         run.error = None
+        run.started_at = datetime.now(timezone.utc)
     file.parse_status = ParseStatus.processing
     file.parse_stage = stage
     file.parse_error = None

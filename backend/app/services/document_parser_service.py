@@ -70,12 +70,30 @@ class DocumentParserService:
         except ImportError:
             return []
         tables: list[str] = []
+        total_characters = 0
         with pdfplumber.open(BytesIO(data) if isinstance(data, bytes) else str(data)) as document:
-            for page_index, page in enumerate(document.pages, start=1):
+            page_count = len(document.pages)
+            if page_count <= settings.pdf_table_max_pages:
+                page_indexes = range(page_count)
+            else:
+                # Full text extraction already covers every page. Sample table pages
+                # across the document so large filings cannot monopolize a worker.
+                page_indexes = sorted({
+                    round(index * (page_count - 1) / (settings.pdf_table_max_pages - 1))
+                    for index in range(settings.pdf_table_max_pages)
+                })
+            for page_index in page_indexes:
+                page = document.pages[page_index]
                 for table_index, table in enumerate(page.extract_tables(), start=1):
                     rows = [" | ".join(cell or "" for cell in row) for row in table if row]
                     if rows:
-                        tables.append(f"PDF Table {page_index}.{table_index}:\n" + "\n".join(rows))
+                        rendered = f"PDF Table {page_index + 1}.{table_index}:\n" + "\n".join(rows)
+                        if total_characters + len(rendered) > settings.pdf_table_max_characters:
+                            return tables
+                        tables.append(rendered)
+                        total_characters += len(rendered)
+                        if len(tables) >= settings.pdf_table_max_tables:
+                            return tables
         return tables
 
     def _parse_docx_text(self, data: bytes | Path) -> str:

@@ -85,6 +85,7 @@ export interface Citation {
   source_kind: string;
   source_url?: string | null;
   source_quality?: string | null;
+  document_role: "company_disclosure" | "industry_context" | "uploaded_evidence";
 }
 
 export interface ChatResponse {
@@ -93,6 +94,7 @@ export interface ChatResponse {
   confidence: "low" | "medium" | "high";
   missing_evidence: string[];
   evidence_control_passed?: boolean | null;
+  quality_issues: string[];
 }
 
 export interface EvidenceRequirement {
