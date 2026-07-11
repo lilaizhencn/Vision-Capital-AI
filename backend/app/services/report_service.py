@@ -21,22 +21,38 @@ class ReportService:
 
     def generate(self, project_id: str, owner_id: str):
         self._ensure_project(project_id, owner_id)
-        chunks = self.rag_service.similarity_search(project_id, "请生成完整投资研究报告", limit=8)
+        chunks = self.rag_service.investment_strategy_search(
+            project_id,
+            "investment report business revenue customers gross margin cash flow competition risks pre-investment during-investment post-investment strategy",
+            limit=14,
+        )
         context = "\n\n".join(chunk.content for chunk in chunks)
         prompt = f"""
-请根据以下项目资料生成投资研究报告，必须包含：
-1. 公司概览
-2. 行业分析
-3. 商业模式
-4. 团队与组织
-5. 财务摘要
-6. 投资亮点
-7. 主要风险
-8. 尽调问题清单
-9. 投资建议
-10. 投前 / 投中 / 投后关注点
+You are an institutional investment research copilot. Generate the report in Chinese.
 
-项目资料：
+Use only the provided materials. Do not invent market size, CAGR, valuation multiples, share prices, management guidance, ratings, or buy/sell recommendations. If a value is missing, place it under "待补充/待验证".
+
+Required sections:
+1. 公司概览
+2. 资料事实
+3. 商业模式与增长驱动
+4. 财务与经营摘要
+5. 投资亮点
+6. 主要风险
+7. 尽调问题清单
+8. 投前策略
+9. 投中策略
+10. 投后策略
+11. 待补充/待验证
+12. 条件式结论
+
+Rules:
+- Separate disclosed facts from strategy inference.
+- If you propose a threshold, label it "建议阈值，需投资委员会确认".
+- For public companies, use public-market execution controls such as watchlist, staged position sizing, IC gates, valuation range to be filled from market data, risk limits, and hedge review. Do not propose private financing rights unless the materials include financing documents.
+- The conclusion must be conditional, not a final investment recommendation.
+
+Materials:
 {context}
 """
         content = self.llm_service.generate(prompt.strip())
