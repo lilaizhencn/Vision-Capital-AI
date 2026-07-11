@@ -62,7 +62,7 @@ class RAGService:
                 extracted_company = extracted_data.get("company") if isinstance(extracted_data, dict) else None
                 if source_kind == "public_research" and extracted_company and not self._same_company(project_company, extracted_company):
                     continue
-                per_file_limit = 3 if source_kind == "public_research" else 6
+                per_file_limit = 8 if source_kind == "public_research" else 12
                 if file_counts.get(item.file_id, 0) >= per_file_limit:
                     continue
                 if query_file_counts.get(item.file_id, 0) >= per_query_file_limit:
@@ -81,8 +81,8 @@ class RAGService:
                 candidates.append(item)
 
         terms = [
-            "ITEM 1. BUSINESS", "business segments", "revenue", "net income", "cash flow",
-            "balance sheet", "customers", "competition", "risk factors", "management",
+            "ITEM 1. BUSINESS", "business segments", "consolidated statements of income", "revenue",
+            "net income", "cash flow", "balance sheet", "customers", "competition", "risk factors", "management",
             "regulation", "industry", "market", "consumer spending", "financial stability",
             "manufacturing economy",
         ]
@@ -91,10 +91,14 @@ class RAGService:
             statement = (
                 select(DocumentChunk)
                 .where(DocumentChunk.project_id == project_id, DocumentChunk.content.ilike(f"%{term}%"))
-                .order_by(DocumentChunk.chunk_index.asc())
-                .limit(6)
+                .limit(40)
             )
-            add(list(self.db.scalars(statement)), per_query_file_limit=1)
+            matches = sorted(
+                self.db.scalars(statement),
+                key=lambda chunk: self._term_chunk_score(chunk.content, term),
+                reverse=True,
+            )
+            add(matches[:8], per_query_file_limit=1)
             if len(candidates) >= limit:
                 break
 
@@ -106,6 +110,26 @@ class RAGService:
         add(self.similarity_search(project_id, query, limit=limit))
 
         return candidates[:limit]
+
+    @staticmethod
+    def _term_chunk_score(content: str, term: str) -> int:
+        lowered = content.lower()
+        score = lowered.count(term.lower()) * 3
+        if term.lower() in {"consolidated statements of income", "revenue", "net income", "cash flow", "balance sheet"}:
+            score += sum(
+                8 for marker in (
+                    "consolidated statements", "years ended", "dollars in", "in millions",
+                    "net sales", "total revenue", "operating income", "cash flows",
+                ) if marker in lowered
+            )
+            score += min(8, len(re.findall(r"\d", content)) // 12)
+            if "united states securities and exchange commission" in lowered:
+                score -= 6
+        if term.lower() == "risk factors" and "item 1a" in lowered:
+            score += 10
+        if term.lower() == "competition" and "competitive" in lowered:
+            score += 6
+        return score
 
     @classmethod
     def _same_company(cls, project_company: str, extracted_company: str) -> bool:

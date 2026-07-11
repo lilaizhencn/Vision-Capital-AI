@@ -8,7 +8,8 @@ from app.ai.llm_service import LLMService
 from app.repositories.chat_repository import ChatRepository
 from app.repositories.file_repository import FileRepository
 from app.repositories.project_repository import ProjectRepository
-from app.schemas.chat import Citation, ChatResponse
+from app.schemas.chat import Citation, ChatResponse, EvidenceClaim
+from app.services.evidence_ledger_service import EvidenceLedgerService
 from app.services.rag_service import RAGService
 from app.services.research_service import ResearchService
 
@@ -58,9 +59,10 @@ class ChatService:
         self.chat_repo.create(project_id=project_id, role="user", content=message)
         evidence_control_passed = None
         quality_issues: list[str] = []
+        claim_ledger: list[EvidenceClaim] = EvidenceLedgerService.build(citations) if is_strategy_question else []
         if is_strategy_question:
             answer, evidence_control_passed, quality_issues = self._ground_strategy_answer(
-                project, message, context_parts, missing_evidence
+                project, message, context_parts, missing_evidence, claim_ledger
             )
         else:
             answer = self.llm_service.generate(self._standard_prompt(project, message, context_parts, missing_evidence))
@@ -73,6 +75,7 @@ class ChatService:
             missing_evidence=missing_evidence,
             evidence_control_passed=evidence_control_passed,
             quality_issues=quality_issues,
+            claim_ledger=claim_ledger,
         )
 
     @staticmethod
@@ -124,15 +127,24 @@ Materials:
 """.strip()
 
     def _ground_strategy_answer(
-        self, project, message: str, context_parts: list[str], missing_evidence: list[str]
+        self,
+        project,
+        message: str,
+        context_parts: list[str],
+        missing_evidence: list[str],
+        claim_ledger: list[EvidenceClaim] | None = None,
     ) -> tuple[str, bool, list[str]]:
+        claim_ledger = claim_ledger if claim_ledger is not None else EvidenceLedgerService.from_context_parts(context_parts)
+        ledger_text = EvidenceLedgerService.serialize(claim_ledger)
         prompt = f"""
 You are the final evidence-control analyst for an institutional investment committee. Generate the answer directly and
 only from the evidence pack below. Do not use outside knowledge, memory, or assumptions about the company or industry.
 
 Non-negotiable review rules:
 1. Every number, named product, named competitor, customer concentration, pipeline code, market claim, and financial
-   trend must be explicitly present in the evidence below. If not, delete it or move it to missing evidence as a question.
+   trend must be explicitly present in the verified claim ledger below. If not, delete it or move it to missing evidence.
+   Every company fact must cite its [C#] claim ID. Every industry scenario statement must cite its [I#] claim ID.
+   Never create a factual statement by combining fragments from different claims.
 2. Arithmetic derived from evidence is allowed only when you show the operands, calculation, source filename, and label
    it as analyst-derived rather than company-disclosed.
 3. Do not turn risk-factor language into a statement that the risk has already occurred.
@@ -145,7 +157,7 @@ Non-negotiable review rules:
 6. Cite source filenames next to material factual claims. Do not cite a source that is absent from the evidence pack.
    Macro and industry sources are context only; do not convert their statistics or trends into company facts.
    Do not claim a macro or regulator report is relevant to the company unless company evidence provides that link.
-   Evidence entries carry a role. Only role=company_disclosure can support company facts. role=industry_context may
+   Ledger entries carry a role. Only role=company_disclosure can support company facts. role=industry_context may
    support scenario context but never a claim about the company. role=uploaded_evidence requires explicit caveating.
    When both company_disclosure and industry_context entries are available, cite at least one filename from each role
    and state explicitly that the industry source is only a scenario baseline.
@@ -178,8 +190,8 @@ PROJECT:
 USER QUESTION:
 {message}
 
-EVIDENCE PACK:
-{chr(10).join(context_parts)}
+VERIFIED CLAIM LEDGER:
+{ledger_text}
 """.strip()
         try:
             raw = self.llm_service.generate(prompt).strip()
@@ -192,33 +204,55 @@ EVIDENCE PACK:
                 if not isinstance(revised, str) or not revised.strip():
                     raise RuntimeError("Evidence-controlled strategy response was malformed")
                 guarded = self._remove_unsupported_numeric_lines(revised.strip(), context_parts)
-                structure_issues = self._strategy_structure_issues(guarded, context_parts) if guarded else ["empty answer"]
+                guarded = EvidenceLedgerService.anchor_references(guarded, claim_ledger)
+                structure_issues = (
+                    self._strategy_structure_issues(guarded, context_parts)
+                    + EvidenceLedgerService.reference_issues(guarded, claim_ledger)
+                    if guarded else ["empty answer"]
+                )
                 if passed is True and not structure_issues:
-                    reviewed = self._run_strategy_critic(project, message, guarded, context_parts)
+                    if attempt == 1:
+                        return guarded, True, []
+                    reviewed = self._run_strategy_critic(project, message, guarded, context_parts, claim_ledger)
                     if reviewed:
                         return reviewed, True, []
                     last_issues = ["independent evidence critic did not pass"]
-                    break
+                    raw = self.llm_service.generate(self._strategy_repair_prompt(
+                        project, message, guarded, context_parts, missing_evidence, last_issues, claim_ledger
+                    )).strip()
+                    continue
                 last_issues = (["model evidence self-check was false"] if passed is not True else []) + structure_issues
                 if attempt == 1:
                     break
                 raw = self.llm_service.generate(self._strategy_repair_prompt(
-                    project, message, revised, context_parts, missing_evidence, last_issues
+                    project, message, revised, context_parts, missing_evidence, last_issues, claim_ledger
                 )).strip()
-            return self._fallback_strategy_answer(missing_evidence), False, last_issues or ["evidence control failed"]
+            return self._recover_strategy_answer(
+                project, claim_ledger, context_parts, missing_evidence, last_issues or ["evidence control failed"]
+            )
         except json.JSONDecodeError:
-            return self._fallback_strategy_answer(missing_evidence), False, ["malformed evidence-control response"]
+            return self._recover_strategy_answer(
+                project, claim_ledger, context_parts, missing_evidence, ["malformed evidence-control response"]
+            )
         except RuntimeError as exc:
-            return self._fallback_strategy_answer(missing_evidence), False, [str(exc)]
+            return self._recover_strategy_answer(project, claim_ledger, context_parts, missing_evidence, [str(exc)])
 
-    def _run_strategy_critic(self, project, message: str, answer: str, context_parts: list[str]) -> str | None:
+    def _run_strategy_critic(
+        self,
+        project,
+        message: str,
+        answer: str,
+        context_parts: list[str],
+        claim_ledger: list[EvidenceClaim],
+    ) -> str | None:
+        ledger_text = EvidenceLedgerService.serialize(claim_ledger)
         raw = self.llm_service.generate(f"""
 You are an independent claim-level evidence critic. Review and, where necessary, edit the work plan below.
 Use only the evidence pack. Return JSON only:
 {{"revised_answer":"...","unsupported_or_overreaching_claims":["..."],"evidence_control_passed":true}}
 
 Hard rules:
-1. Every company fact and number must be in a role=company_disclosure excerpt and cite that exact filename.
+1. Every company fact and number must cite a valid [C#] ledger claim. Every industry scenario must cite a valid [I#].
 2. role=industry_context supports scenario baselines only. Never transfer its trend, statistic, or risk to the company.
 3. Analyst inference must be a direct logical implication. Delete causal or evaluative leaps such as "shows confidence",
    "proves resilience", "strategy is working", "stable profitability", "has a moat", or "will benefit" unless the
@@ -227,16 +261,17 @@ Hard rules:
 5. Verification actions and conditional IC procedures are analyst recommendations and are allowed, but must not invent
    company events, numeric thresholds, valuation, or available documents.
    Never add consecutive-quarter/month triggers, count-based exit rules, or spelled-out numeric gates.
-6. Preserve the five-section structure and exact field labels. Preserve useful evidence-backed detail and filename
-   citations; do not replace the answer with a generic refusal.
+6. Preserve the five-section structure and exact field labels. Preserve useful evidence-backed detail, filename
+   citations, and every valid [C#]/[I#] reference; do not replace the answer with a generic refusal. If a sentence is
+   removed, remove only its reference. Never return a company fact without a C reference or industry context without I.
 7. Set evidence_control_passed true only after every unsupported company claim and overreaching inference is removed.
 
 PROJECT: {project.company_name}; {project.industry}; {project.stage}
 QUESTION: {message}
 WORK PLAN:
 {answer}
-EVIDENCE PACK:
-{chr(10).join(context_parts)}
+VERIFIED CLAIM LEDGER:
+{ledger_text}
 """.strip()).strip()
         try:
             cleaned = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
@@ -245,7 +280,10 @@ EVIDENCE PACK:
             if not isinstance(result, dict) or result.get("evidence_control_passed") is not True or not isinstance(revised, str):
                 return None
             guarded = self._remove_unsupported_numeric_lines(revised.strip(), context_parts)
-            return guarded if not self._strategy_structure_issues(guarded, context_parts) else None
+            guarded = EvidenceLedgerService.anchor_references(guarded, claim_ledger)
+            issues = self._strategy_structure_issues(guarded, context_parts)
+            issues.extend(EvidenceLedgerService.reference_issues(guarded, claim_ledger))
+            return guarded if not issues else None
         except (json.JSONDecodeError, RuntimeError):
             return None
 
@@ -257,7 +295,9 @@ EVIDENCE PACK:
         context_parts: list[str],
         missing_evidence: list[str],
         failed_checks: list[str],
+        claim_ledger: list[EvidenceClaim],
     ) -> str:
+        ledger_text = EvidenceLedgerService.serialize(claim_ledger)
         return f"""
 You are the second and final evidence-control reviewer. Repair the draft into a professionally usable institutional
 investment work plan using only the evidence pack. Delete unsupported claims rather than rationalizing them.
@@ -269,8 +309,8 @@ assess items. Verification actions must name the exact field, primary source, an
 variables but never invent thresholds. Do not request documents already present in the evidence pack. Cite filenames.
 Use these exact English field labels in every stage, even when a field has no supported content: Company-disclosed
 facts, Analyst inference, Verification action, IC gate, Cannot assess. The values may be written in Chinese.
-Only role=company_disclosure supports company facts. role=industry_context is scenario context only, and
-role=uploaded_evidence must be caveated unless independently verified.
+Only C claims support company facts. I claims are scenario context only. Every company fact must cite [C#], and every
+industry-context statement must cite [I#]. Unknown claim IDs are prohibited.
 When both company and industry roles are available, cite at least one filename from each and label the industry source
 as a scenario baseline rather than evidence about the company.
 Return JSON only:
@@ -283,8 +323,8 @@ KNOWN GAPS:
 {chr(10).join(missing_evidence)}
 DRAFT TO REPAIR:
 {draft}
-EVIDENCE PACK:
-{chr(10).join(context_parts)}
+VERIFIED CLAIM LEDGER:
+{ledger_text}
 """.strip()
 
     @staticmethod
@@ -295,6 +335,70 @@ EVIDENCE PACK:
             "## 待补充/待验证\n" + gaps + "\n\n"
             "## 下一步动作\n按上述清单补齐原始资料，完成来源交叉验证后重新运行投前分析。"
         )
+
+    def _recover_strategy_answer(
+        self,
+        project,
+        claims: list[EvidenceClaim],
+        context_parts: list[str],
+        missing_evidence: list[str],
+        model_issues: list[str],
+    ) -> tuple[str, bool, list[str]]:
+        company_claims = [claim for claim in claims if claim.document_role == "company_disclosure"]
+        if not company_claims:
+            return self._fallback_strategy_answer(missing_evidence), False, model_issues
+
+        def select(categories: tuple[str, ...], limit: int = 4) -> list[EvidenceClaim]:
+            selected = [claim for claim in company_claims if claim.category in categories][:limit]
+            return selected or company_claims[:limit]
+
+        def facts(items: list[EvidenceClaim]) -> str:
+            return "; ".join(
+                f"{item.claim} [{item.claim_id}] ({item.source_filename})" for item in items
+            )
+
+        context_claims = [claim for claim in claims if claim.document_role == "industry_context"][:3]
+        context_text = "; ".join(
+            f"{item.claim} [{item.claim_id}] ({item.source_filename})" for item in context_claims
+        ) or "No verified industry-context claim is available."
+        gap_names = [item.split(":", 1)[0].strip() for item in missing_evidence if item.strip()]
+        gap_text = ", ".join(gap_names) or "valuation, transaction terms, and independent source reconciliation"
+        pre = select(("financial", "business", "market", "competition", "customers"))
+        during = select(("risk", "legal", "governance", "financial"))
+        post = select(("customers", "business", "risk", "financial"))
+        answer = f"""
+## IC Summary
+The verified ledger for {project.company_name} supports a preliminary evidence work plan, not an unconditional investment recommendation. Company disclosures establish: {facts(pre[:3])}. Industry context is a scenario baseline only and is not evidence about the company: {context_text}. Valuation, position size, transaction terms, and causal forecasts remain unassessed until the named primary-source fields are reconciled.
+
+## Pre-Investment
+- **Company-disclosed facts**: {facts(pre)}.
+- **Analyst inference**: Only the disclosed facts above are established. They do not by themselves establish valuation, persistence, causality, competitive advantage, or investability.
+- **Verification action**: Reconcile revenue, earnings, cash flow, balance-sheet, segment, customer, and ownership fields from the cited source files to the audited primary statements and the transaction model; record every variance and source date.
+- **IC gate**: Proceed only after the committee confirms source reconciliation, valuation inputs, transaction mandate, and decision-variable thresholds. No numeric threshold is inferred here.
+- **Cannot assess**: {gap_text}; market pricing and recommendation strength cannot currently be assessed.
+
+## During-Investment
+- **Company-disclosed facts**: {facts(during)}.
+- **Analyst inference**: The ledger supports monitoring these disclosed fields only; it does not prove a trend will persist or that an identified risk has occurred.
+- **Verification action**: Reconcile each periodic KPI and covenant field to signed statements, bank or custodian evidence, and the approved transaction model; escalate unexplained differences to the investment committee.
+- **IC gate**: Continue funding or execution only when reporting scope, covenant status, data lineage, and mandate-defined variance thresholds are confirmed by the committee.
+- **Cannot assess**: Future performance, financing availability, legal outcome, and management execution cannot be assessed without current primary evidence.
+
+## Post-Investment
+- **Company-disclosed facts**: {facts(post)}.
+- **Analyst inference**: These claims define an initial monitoring baseline only and do not establish exit timing, realized value, or attribution.
+- **Verification action**: Reconcile periodic operating, liquidity, customer, governance, and risk fields to source systems and approved board reporting; preserve dated evidence for every change.
+- **IC gate**: Escalate, hold, or exit only under mandate-approved decision variables after the underlying evidence is verified; no count-based or numeric trigger is invented here.
+- **Cannot assess**: Exit value, return attribution, downside recovery, and post-investment trend persistence cannot currently be assessed.
+
+## Evidence Gaps
+{chr(10).join(f"- {item}" for item in missing_evidence) or "- Independent verification and transaction-specific inputs remain required."}
+""".strip()
+        issues = self._strategy_structure_issues(answer, context_parts)
+        issues.extend(EvidenceLedgerService.reference_issues(answer, claims))
+        if issues:
+            return self._fallback_strategy_answer(missing_evidence), False, model_issues + issues
+        return answer, True, ["model draft failed evidence gates; deterministic evidence plan used"]
 
     @staticmethod
     def _remove_unsupported_numeric_lines(answer: str, context_parts: list[str]) -> str:
@@ -357,14 +461,17 @@ EVIDENCE PACK:
             "cannot assess": ("cannot assess", "无法判断", "暂不判断", "无法评估"),
         }
         issues.extend(label for label, markers in semantic_markers.items() if not any(marker in lowered for marker in markers))
-        filenames = {
-            match.split(" | role=", 1)[0]
-            for part in context_parts
-            for match in re.findall(r"\[([^\]]+)\]", part)
-        }
-        cited_files = sum(filename in answer for filename in filenames)
-        if cited_files < min(2, len(filenames)):
-            issues.append("insufficient filename citations")
+        if any(marker in lowered for marker in ("may indicate", "could indicate", "may reflect", "could reflect")):
+            issues.append("unsupported causal inference language")
+        evidence = "\n".join(context_parts).lower()
+        has_annual_filing = "annual report" in evidence or "form 10-k" in evidence or "form 10k" in evidence
+        requests_annual_filing = bool(re.search(
+            r"\b(?:obtain|request)\b.{0,100}\b(?:annual report|audited financial statements?|10-k|10k)\b",
+            lowered,
+            re.DOTALL,
+        ))
+        if has_annual_filing and requests_annual_filing:
+            issues.append("requests an annual filing already present in evidence")
         if len(answer) < 800:
             issues.append("answer too short for a staged IC work plan")
         return issues

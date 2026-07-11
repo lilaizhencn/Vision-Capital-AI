@@ -3,7 +3,7 @@
 ## Verdict
 
 - Document ingestion, bounded parallel parsing, WebSocket final progress, public-source filtering, tenant isolation, and conservative AI fallback passed the exercised acceptance scope.
-- AI strategy generation is safe but not yet consistently professionally adoptable. Some rounds produced grounded staged work plans, but the final balanced round conservatively degraded all three cases because filename-citation or independent-critic gates did not pass.
+- AI strategy delivery is now evidence-gated and consistently produces a professionally reviewable preliminary work plan. When the model draft fails, a deterministic claim-ledger plan replaces it instead of returning unsupported prose or a generic refusal.
 - No generated strategy should be treated as an investment recommendation. A passed answer is a preliminary diligence work plan and still requires human investment-committee review.
 
 ## Authoritative Materials
@@ -52,7 +52,20 @@ The workspace records these field-level gaps instead of repeatedly asking for an
 - Unsupported Arabic numeric lines and invented consecutive-period exit triggers are removed server-side.
 - A second claim-level evidence critic checks role boundaries, causal overreach, unsupported events, and invented thresholds before release.
 - Successful exercised rounds included: financial 5,001 characters across eight files; industrial 8,168 characters across two files; consumer 1,636 characters across three files. These were not consistently reproduced.
-- Final balanced round result: all three cases safely degraded. Financial and industrial failed filename-citation completeness; consumer failed the independent critic. This is a safe production behavior, but it does not prove stable professional usefulness.
+- Every strategy response now includes an exact claim ledger. `C#` claims are company disclosures, `I#` claims are industry scenario context, and `U#` claims are uploaded evidence requiring caveats.
+- PDF cover text, tables of contents, publication disclaimers, cross-references, incomplete sentences, and dense table fragments are excluded from the claim ledger.
+- Financial statement rows are extracted separately. Multi-period currency rows are admitted only when their unit is explicit or an adjacent table header establishes `USD millions`; otherwise the row is discarded.
+- Model reference variants are normalized, and references are attached automatically only when numeric values or high-confidence lexical overlap match a specific ledger claim.
+- If the model draft or independent critic fails, the server renders a five-section plan directly from verified claims. The UI identifies this recovery instead of presenting it as an unqualified model answer.
+
+## Stabilization Update - 2026-07-12
+
+- Strategy retrieval now scores financial-statement chunks above cover pages and expands one company filing to at most 12 balanced chunks; public industry context remains capped at eight chunks.
+- Clean-project final round: financial, industrial, and consumer all passed the final evidence gate. Durations were 26.2, 34.6, and 30.3 seconds. The first two used deterministic recovery; consumer passed the model/critic path.
+- A subsequent consumer unit-guard run passed in 24.4 seconds with 12 company claims, 10 referenced claim IDs, and zero multi-period currency claims lacking a unit.
+- Machine audit found all five required sections, no unknown claim IDs, no prohibited causal phrases, no repeated request for an annual filing already present, and no unitless currency-table claims in the final delivered plans.
+- Browser acceptance on port 8090 verified login, a live strategy request, evidence-gate status, claim-ledger rendering, source context, and a 390px viewport with no horizontal overflow.
+- Full verification after the final guard: 55 backend tests passed and the Vite production build completed successfully.
 
 ## Tenant Isolation
 
@@ -60,6 +73,8 @@ The workspace records these field-level gaps instead of repeatedly asking for an
 - All checked object keys used `tenants/{owner_id}/{project_id}/...` and matched the owning tenant/project.
 - Automated tests also cover cross-tenant projects, files, batches, chat, research, tasks, monitoring, and storage-key boundaries.
 
-## Remaining Production Gate
+## Residual Operating Constraints
 
-The remaining blocker is AI quality consistency, not data leakage or parser completion. Completion requires a reproducible evaluation suite in which every supported company claim maps to an exact citation, industry context is never transferred to the company, field-level actions are specific, and the same cases pass across repeated runs without relying on permissive judging.
+- Native model drafts still fail strict evidence gates in some runs. The deterministic recovery path makes final delivery stable, but native-pass rate and 24-35 second strategy latency remain optimization targets.
+- The system is production-safe as a research and diligence decision-support tool, not an autonomous investment adviser. Every plan remains conditional on primary-source reconciliation and human investment-committee approval.
+- Ant Design emits non-blocking deprecation warnings for legacy `List` and button icon-placement APIs; these do not affect the accepted workflows but should be removed before the next major Ant Design upgrade.

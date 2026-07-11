@@ -732,6 +732,166 @@ def test_strategy_guard_removes_invented_consecutive_period_exit_rules() -> None
     assert "继续跟踪原始披露" in guarded
 
 
+def test_evidence_ledger_uses_exact_quotes_and_role_ids() -> None:
+    from app.schemas.chat import Citation
+    from app.services.evidence_ledger_service import EvidenceLedgerService
+
+    citations = [
+        Citation(
+            file_id="company-file",
+            filename="annual-report.pdf",
+            content="The company reported revenue of $120 million and positive operating cash flow for the fiscal year.",
+            document_role="company_disclosure",
+        ),
+        Citation(
+            file_id="industry-file",
+            filename="industry-report.pdf",
+            content="The manufacturing industry experienced broad market uncertainty and supply-chain risk during the year.",
+            document_role="industry_context",
+        ),
+    ]
+
+    ledger = EvidenceLedgerService.build(citations)
+
+    assert {item.claim_id[0] for item in ledger} == {"C", "I"}
+    assert all(item.claim == item.evidence_quote for item in ledger)
+    assert all(item.evidence_quote in next(c.content for c in citations if c.filename == item.source_filename) for item in ledger)
+
+
+def test_evidence_ledger_rejects_unknown_and_unreferenced_company_claims() -> None:
+    from app.schemas.chat import Citation
+    from app.services.evidence_ledger_service import EvidenceLedgerService
+
+    ledger = EvidenceLedgerService.build([
+        Citation(
+            file_id="company-file",
+            filename="annual-report.pdf",
+            content="The company reported revenue of $120 million and positive operating cash flow for the fiscal year.",
+            document_role="company_disclosure",
+        )
+    ])
+
+    missing = EvidenceLedgerService.reference_issues("Company-disclosed facts: Revenue was reported.", ledger)
+    unknown = EvidenceLedgerService.reference_issues("Company-disclosed facts: Revenue was reported [C99].", ledger)
+
+    assert "no verified company claim reference" in missing
+    assert "company-disclosed fact lacks a verified C claim reference" in missing
+    assert "unknown claim reference C99" in unknown
+
+
+def test_evidence_ledger_filters_boilerplate_tables_and_incomplete_fragments() -> None:
+    from app.services.evidence_ledger_service import EvidenceLedgerService
+
+    content = "\n".join([
+        "TABLE OF CONTENTS PART I Item 1. Business Item 1A. Risk Factors.",
+        "6,134 7,154 6,587 11,541 $13,373 $13,050 Current tax provision 2025 2024 2023.",
+        "Backed by a dealer network, the company provides products and services through three business segments",
+        "58 CATERPILLAR 2025 FORM 10-K The following table is a reconciliation of income taxes.",
+        "The company reported 2025 sales and revenues of $67.589 billion across its business segments.",
+    ])
+
+    sentences = EvidenceLedgerService._sentences(content)
+
+    assert sentences == ["The company reported 2025 sales and revenues of $67.589 billion across its business segments."]
+
+
+def test_evidence_ledger_extracts_exact_financial_metric_rows() -> None:
+    from app.services.evidence_ledger_service import EvidenceLedgerService
+
+    content = (
+        "Financial Highlights (in millions, except per share data) 2025 2024 2023 "
+        "Total net revenue $ 182,447 $ 177,556 $ 158,104 "
+        "Total noninterest expense 95,640 91,797 87,172. "
+        "Balance Sheet and Liquidity Cash and cash equivalents of $9.4 billion Total debt of $50.3 billion."
+    )
+
+    quotes = EvidenceLedgerService._metric_quotes(content)
+
+    assert "Total net revenue $ 182,447 $ 177,556 $ 158,104" in quotes
+    assert "Cash and cash equivalents of $9.4 billion" in quotes
+    assert "Total debt of $50.3 billion" in quotes
+    claims = EvidenceLedgerService._metric_claims(content)
+    assert (
+        "Total net revenue $ 182,447 $ 177,556 $ 158,104 (table unit: USD millions)",
+        "Total net revenue $ 182,447 $ 177,556 $ 158,104",
+    ) in claims
+
+    walmart_rows = EvidenceLedgerService._metric_claims(
+        "Fiscal Years Ended (Amounts in millions) 2026 2025 2024 "
+        "Walmart U.S. Net sales $ 482,975 $ 462,415 $ 441,817 "
+        "Operating income $ 29,825 $ 29,348 $ 27,012"
+    )
+    assert (
+        "Walmart U.S. Net sales $ 482,975 $ 462,415 $ 441,817 (table unit: USD millions)",
+        "Walmart U.S. Net sales $ 482,975 $ 462,415 $ 441,817",
+    ) in walmart_rows
+    assert EvidenceLedgerService._metric_claims(
+        "Net income attributable to Example $ 21,893 $ 19,436 $ 15,511"
+    ) == []
+
+
+def test_evidence_ledger_does_not_split_common_financial_abbreviations() -> None:
+    from app.services.evidence_ledger_service import EvidenceLedgerService
+
+    content = "The index ranked the U.S. as sixth among manufacturing economies. J.P. Morgan serves institutional clients globally."
+
+    assert EvidenceLedgerService._sentences(content) == [
+        "The index ranked the U.S. as sixth among manufacturing economies.",
+        "J.P. Morgan serves institutional clients globally.",
+    ]
+
+
+def test_evidence_ledger_anchors_only_high_confidence_fact_matches() -> None:
+    from app.schemas.chat import EvidenceClaim
+    from app.services.evidence_ledger_service import EvidenceLedgerService
+
+    claims = [EvidenceClaim(
+        claim_id="C1",
+        claim="The company reported revenue of $120 million for the fiscal year.",
+        source_filename="annual-report.pdf",
+        document_role="company_disclosure",
+        evidence_quote="The company reported revenue of $120 million for the fiscal year.",
+        category="financial",
+    )]
+
+    anchored = EvidenceLedgerService.anchor_references(
+        "Company-disclosed facts: Revenue was $120 million (annual-report.pdf).", claims
+    )
+    unrelated = EvidenceLedgerService.anchor_references(
+        "Company-disclosed facts: The company has a durable competitive moat.", claims
+    )
+
+    assert anchored.endswith("[C1]")
+    assert "[C1]" not in unrelated
+
+
+def test_evidence_ledger_normalizes_reference_brackets() -> None:
+    from app.services.evidence_ledger_service import EvidenceLedgerService
+
+    assert EvidenceLedgerService.anchor_references("Fact 【C1】 and context (I2).", []) == "Fact [C1] and context [I2]."
+
+
+def test_strategy_rag_prefers_financial_statement_chunks_over_cover_pages() -> None:
+    from app.services.rag_service import RAGService
+
+    cover = "Revenue growth highlights UNITED STATES SECURITIES AND EXCHANGE COMMISSION 2025."
+    statement = (
+        "Consolidated Statements of Income, dollars in millions, years ended 2025 and 2024. "
+        "Total revenue 182447 177556; net income 57048 58471; operating income 64000 62000."
+    )
+
+    assert RAGService._term_chunk_score(statement, "revenue") > RAGService._term_chunk_score(cover, "revenue")
+
+
+def test_strategy_gate_rejects_request_for_present_audited_statements() -> None:
+    from app.services.chat_service import ChatService
+
+    answer = "Request the audited financial statements. " + "x" * 900
+    issues = ChatService._strategy_structure_issues(answer, ["[annual-report.pdf] FORM 10-K annual report"])
+
+    assert "requests an annual filing already present in evidence" in issues
+
+
 def test_strategy_answer_falls_back_when_evidence_control_does_not_pass() -> None:
     from app.services.chat_service import ChatService
 
@@ -749,6 +909,49 @@ def test_strategy_answer_falls_back_when_evidence_control_does_not_pass() -> Non
     assert issues
     assert "Unsupported claim" not in answer
     assert "Audited financial statements are missing" in answer
+
+
+def test_strategy_answer_recovers_with_deterministic_claim_plan() -> None:
+    from app.schemas.chat import EvidenceClaim
+    from app.services.chat_service import ChatService
+
+    service = ChatService.__new__(ChatService)
+    service.llm_service = SimpleNamespace(generate=lambda _prompt: '{"revised_answer":"bad","evidence_control_passed":false}')
+    claims = [
+        EvidenceClaim(
+            claim_id="C1",
+            claim="Revenue was $120 million for the fiscal year.",
+            source_filename="annual-report.pdf",
+            document_role="company_disclosure",
+            evidence_quote="Revenue was $120 million for the fiscal year.",
+            category="financial",
+        ),
+        EvidenceClaim(
+            claim_id="I1",
+            claim="Industry demand was volatile during the year.",
+            source_filename="industry-report.pdf",
+            document_role="industry_context",
+            evidence_quote="Industry demand was volatile during the year.",
+            category="market",
+        ),
+    ]
+
+    answer, passed, issues = service._ground_strategy_answer(
+        SimpleNamespace(company_name="Acme", industry="SaaS", stage="Seed"),
+        "investment strategy",
+        [
+            "[annual-report.pdf | role=company_disclosure] Revenue was $120 million for the fiscal year.",
+            "[industry-report.pdf | role=industry_context] Industry demand was volatile during the year.",
+        ],
+        ["Valuation inputs are missing"],
+        claims,
+    )
+
+    assert passed is True
+    assert "deterministic evidence plan" in issues[0]
+    assert "[C1]" in answer
+    assert "[I1]" in answer
+    assert "## Post-Investment" in answer
 
 
 def test_strategy_answer_requires_explicit_true_evidence_control() -> None:

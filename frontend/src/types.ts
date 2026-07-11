@@ -95,6 +95,16 @@ export interface ChatResponse {
   missing_evidence: string[];
   evidence_control_passed?: boolean | null;
   quality_issues: string[];
+  claim_ledger: EvidenceClaim[];
+}
+
+export interface EvidenceClaim {
+  claim_id: string;
+  claim: string;
+  source_filename: string;
+  document_role: "company_disclosure" | "industry_context" | "uploaded_evidence";
+  evidence_quote: string;
+  category: string;
 }
 
 export interface EvidenceRequirement {

@@ -17,6 +17,15 @@ class Citation(BaseModel):
     document_role: str = "uploaded_evidence"
 
 
+class EvidenceClaim(BaseModel):
+    claim_id: str
+    claim: str
+    source_filename: str
+    document_role: str
+    evidence_quote: str
+    category: str
+
+
 class ChatResponse(BaseModel):
     answer: str
     citations: list[Citation]
@@ -24,6 +33,7 @@ class ChatResponse(BaseModel):
     missing_evidence: list[str]
     evidence_control_passed: bool | None = None
     quality_issues: list[str] = Field(default_factory=list)
+    claim_ledger: list[EvidenceClaim] = Field(default_factory=list)
 
 
 class ChatMessageRead(BaseModel):

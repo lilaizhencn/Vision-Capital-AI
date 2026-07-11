@@ -158,6 +158,9 @@ button, input, textarea { font: inherit; }
 .analysis-result { margin-top: 24px; padding: 20px; border-left: 3px solid var(--teal); background: #eaf2ed; }
 .analysis-result p { line-height: 1.8; }
 .analysis-answer { margin-top: 14px; white-space: pre-wrap; }
+.analysis-quality-alert { margin-top: 14px; }
+.claim-ledger { margin: 8px 0 20px; padding: 0 14px; border: 1px solid var(--line); background: rgba(255, 255, 255, .55); }
+.claim-ledger .ant-list-item-meta-description { display: grid; gap: 6px; line-height: 1.65; }
 .evidence-missing-list { margin: 8px 0 0; padding-left: 20px; }
 .evidence-missing-list li { margin: 5px 0; line-height: 1.55; }
 .evidence-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 20px; }
