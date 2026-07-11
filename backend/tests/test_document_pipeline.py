@@ -201,6 +201,16 @@ def test_virus_scanner_streams_clamav_protocol(monkeypatch) -> None:
     assert bytes(fake.payload).startswith(b"zINSTREAM\x00")
 
 
+def test_virus_scanner_unavailability_is_retryable(monkeypatch) -> None:
+    from app.services.virus_scan_service import VirusScannerUnavailable
+
+    monkeypatch.setattr(settings, "virus_scan_enabled", True)
+    monkeypatch.setattr(socket, "create_connection", lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("busy")))
+    with pytest.raises(VirusScannerUnavailable):
+        VirusScanner().scan_bytes(b"safe")
+    assert issubclass(VirusScannerUnavailable, ConnectionError)
+
+
 def test_chunking_overlaps_and_estimates_tokens() -> None:
     text = "0123456789" * 300
 
@@ -302,6 +312,31 @@ def test_single_upload_enforces_maximum_size(api_client, monkeypatch) -> None:
     assert response.status_code == 413
 
 
+def test_duplicate_clean_file_reuses_existing_parse(api_client, monkeypatch) -> None:
+    monkeypatch.setattr(VirusScanner, "scan_file", lambda _self, _path: "stream: OK")
+    token = api_client.post(
+        "/api/auth/register",
+        json={"email": "dedupe@example.com", "username": "dedupe", "password": "strong-password"},
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    project_id = api_client.post(
+        "/api/projects", headers=headers,
+        json={"name": "Dedupe QA", "company_name": "Acme", "industry": "SaaS", "stage": "Seed"},
+    ).json()["id"]
+    for filename in ("original.txt", "duplicate.txt"):
+        response = api_client.post(
+            f"/api/projects/{project_id}/files/upload", headers=headers,
+            files={"upload_file": (filename, b"same clean investment evidence", "text/plain")},
+        )
+        assert response.status_code == 200
+
+    files = api_client.get(f"/api/projects/{project_id}/files", headers=headers).json()
+    duplicate = next(item for item in files if item["filename"] == "duplicate.txt")
+    original = next(item for item in files if item["filename"] == "original.txt")
+    assert duplicate["parse_status"] == "completed"
+    assert duplicate["extracted_data"] == {"duplicate_of": original["id"]}
+
+
 def test_batch_upload_complete_and_parse_flow(api_client) -> None:
     token = api_client.post("/api/auth/register", json={"email": "batch@example.com", "username": "batch", "password": "strong-password"}).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -382,7 +417,10 @@ def test_project_dashboard_chat_and_report_flow(api_client, monkeypatch) -> None
 
     chat = api_client.post(f"/api/projects/{project_id}/chat", headers=headers, json={"message": "Summarize the project"})
     assert chat.status_code == 200
-    assert chat.json() == {"answer": "stub AI response", "citations": []}
+    assert chat.json()["answer"] == "stub AI response"
+    assert chat.json()["citations"] == []
+    assert chat.json()["confidence"] == "low"
+    assert chat.json()["missing_evidence"]
 
     generated = api_client.post(f"/api/projects/{project_id}/reports/generate", headers=headers)
     assert generated.status_code == 200
@@ -404,6 +442,58 @@ def test_project_dashboard_chat_and_report_flow(api_client, monkeypatch) -> None
 
     assert api_client.delete(f"/api/projects/{project_id}", headers=headers).status_code == 200
     assert api_client.get(f"/api/projects/{project_id}", headers=headers).status_code == 404
+
+
+def test_cross_tenant_project_resources_and_storage_are_isolated(api_client, monkeypatch) -> None:
+    monkeypatch.setattr(LLMService, "generate", lambda _self, _prompt: "isolated")
+    owner_token = api_client.post(
+        "/api/auth/register",
+        json={"email": "tenant-owner@example.com", "username": "tenant-owner", "password": "strong-password"},
+    ).json()["access_token"]
+    other_token = api_client.post(
+        "/api/auth/register",
+        json={"email": "tenant-other@example.com", "username": "tenant-other", "password": "strong-password"},
+    ).json()["access_token"]
+    owner_headers = {"Authorization": f"Bearer {owner_token}"}
+    other_headers = {"Authorization": f"Bearer {other_token}"}
+    owner_id = api_client.get("/api/auth/me", headers=owner_headers).json()["id"]
+    project_id = api_client.post(
+        "/api/projects", headers=owner_headers,
+        json={"name": "Tenant Boundary", "company_name": "Boundary Co", "industry": "Security", "stage": "Seed"},
+    ).json()["id"]
+    uploaded = api_client.post(
+        f"/api/projects/{project_id}/files/upload", headers=owner_headers,
+        files={"upload_file": ("tenant.txt", b"confidential customer contract", "text/plain")},
+    ).json()["file"]
+    batch = api_client.post(
+        f"/api/projects/{project_id}/file-batches", headers=owner_headers,
+        json={"files": [{"filename": "private.txt", "size": 7, "content_type": "text/plain"}]},
+    ).json()
+
+    assert uploaded["r2_object_key"].startswith(f"tenants/{owner_id}/{project_id}/")
+    assert api_client.get(f"/api/projects/{project_id}", headers=other_headers).status_code == 404
+    assert api_client.get(f"/api/projects/{project_id}/files", headers=other_headers).status_code == 404
+    assert api_client.get(f"/api/files/{uploaded['id']}", headers=other_headers).status_code == 404
+    assert api_client.get(f"/api/file-batches/{batch['id']}", headers=other_headers).status_code == 404
+    assert api_client.post(f"/api/file-batches/{batch['id']}/complete", headers=other_headers).status_code == 404
+    assert api_client.get(f"/api/projects/{project_id}/research", headers=other_headers).status_code == 404
+    assert api_client.post(f"/api/projects/{project_id}/chat", headers=other_headers, json={"message": "show data"}).status_code == 404
+    assert api_client.get(f"/api/projects/{project_id}/tasks", headers=other_headers).status_code == 404
+    assert api_client.get(f"/api/projects/{project_id}/monitoring", headers=other_headers).status_code == 404
+
+    workspace = api_client.get(f"/api/projects/{project_id}/research", headers=owner_headers)
+    assert workspace.status_code == 200
+    assert len(workspace.json()["requirements"]) == 8
+
+
+def test_research_trust_allowlist_rejects_lookalike_domains() -> None:
+    from app.services.research_service import ResearchService
+
+    assert ResearchService._is_trusted_domain("www.sec.gov")
+    assert ResearchService._is_trusted_domain("documents1.worldbank.org")
+    assert ResearchService._is_trusted_domain("www.irena.org")
+    assert not ResearchService._is_trusted_domain("sec.gov.attacker.example")
+    assert not ResearchService._is_trusted_domain("example.com")
 
 
 def test_monitoring_updates_are_persisted_and_owner_scoped(api_client) -> None:
@@ -501,3 +591,23 @@ def test_llm_service_uses_openai_compatible_chat_completions(monkeypatch) -> Non
 
     assert service.generate("test prompt") == "answer"
     assert calls["messages"] == [{"role": "user", "content": "test prompt"}]
+
+
+def test_chinese_investment_stage_questions_use_strategy_path() -> None:
+    from app.services.chat_service import ChatService
+
+    assert ChatService._is_strategy_question("请给出投前策略")
+    assert ChatService._is_strategy_question("投中阶段如何控制仓位")
+    assert ChatService._is_strategy_question("投后应该跟踪哪些 KPI")
+    assert not ChatService._is_strategy_question("请概括产品功能")
+
+
+def test_strategy_numeric_guard_removes_values_absent_from_evidence() -> None:
+    from app.services.chat_service import ChatService
+
+    answer = "## 1. 事实\n收入为 120 百万美元。\n建议设置 65% 毛利率门槛。\n保持定性观察。"
+    guarded = ChatService._remove_unsupported_numeric_lines(answer, ["Revenue was $120 million."])
+
+    assert "120" in guarded
+    assert "65%" not in guarded
+    assert "保持定性观察" in guarded

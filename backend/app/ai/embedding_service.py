@@ -9,7 +9,7 @@ from app.core.config import settings
 class EmbeddingService:
     def __init__(self) -> None:
         self.client = None
-        if settings.llm_api_key:
+        if settings.llm_api_key and not settings.embedding_model.startswith("local-hash-"):
             self.client = OpenAI(api_key=settings.llm_api_key, base_url=settings.llm_base_url)
 
     def embed_text(self, text: str) -> list[float]:

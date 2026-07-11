@@ -7,6 +7,10 @@ from pathlib import Path
 from app.core.config import settings
 
 
+class VirusScannerUnavailable(ConnectionError):
+    """Transient scanner outage that Celery may safely retry."""
+
+
 class VirusScanner:
     """Small ClamAV INSTREAM client with a safe disabled-local fallback."""
 
@@ -34,7 +38,7 @@ class VirusScanner:
                 connection.sendall((0).to_bytes(4, "big"))
                 response = connection.recv(4096).decode("utf-8", errors="replace").replace("\x00", "").strip()
         except OSError as exc:
-            raise RuntimeError("Virus scanner is unavailable") from exc
+            raise VirusScannerUnavailable("Virus scanner is unavailable") from exc
         if not response.endswith("OK"):
             raise ValueError(f"Virus scan rejected the file: {response or 'unknown result'}")
         return response

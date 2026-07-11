@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.ai.embedding_service import EmbeddingService
 from app.models.chunk import DocumentChunk
+from app.models.file import ProjectFile
 
 
 class RAGService:
@@ -36,6 +37,10 @@ class RAGService:
         """Gather a broader evidence pack for investment-stage strategy questions."""
         candidates: list[DocumentChunk] = []
         seen: set[str] = set()
+        file_counts: dict[str, int] = {}
+        source_kinds = dict(self.db.execute(
+            select(ProjectFile.id, ProjectFile.source_kind).where(ProjectFile.project_id == project_id)
+        ).all())
 
         lowered = query.lower()
         skip_accounting_investments = any(marker in lowered for marker in ("投中", "交易", "投委", "仓位", "估值", "during"))
@@ -43,6 +48,9 @@ class RAGService:
         def add(items: list[DocumentChunk]) -> None:
             for item in items:
                 if item.id in seen:
+                    continue
+                per_file_limit = 2 if source_kinds.get(item.file_id) == "public_research" else 8
+                if file_counts.get(item.file_id, 0) >= per_file_limit:
                     continue
                 item_text = item.content.lower()
                 if skip_accounting_investments and any(term in item_text for term in (
@@ -53,6 +61,7 @@ class RAGService:
                 )):
                     continue
                 seen.add(item.id)
+                file_counts[item.file_id] = file_counts.get(item.file_id, 0) + 1
                 candidates.append(item)
 
         if any(marker in lowered for marker in ("投中", "交易", "投委", "仓位", "估值", "during")):
@@ -67,7 +76,7 @@ class RAGService:
                 select(DocumentChunk)
                 .where(DocumentChunk.project_id == project_id, DocumentChunk.content.ilike(f"%{term}%"))
                 .order_by(DocumentChunk.chunk_index.asc())
-                .limit(2)
+                .limit(limit)
             )
             add(list(self.db.scalars(statement)))
             if len(candidates) >= limit:

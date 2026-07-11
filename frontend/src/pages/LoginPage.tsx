@@ -26,7 +26,7 @@ export function LoginPage() {
           <div className="auth-story-copy"><p className="auth-kicker">A CLEARER INVESTMENT SIGNAL</p><Typography.Title>让每一次判断，<em>都有依据。</em></Typography.Title><Typography.Paragraph>把资料、研究与团队协作放进同一条投资主线，让重要信息在正确的时刻被看见。</Typography.Paragraph></div>
           <div className="auth-proof"><span><strong>01</strong> 资料可追溯</span><span><strong>02</strong> 研究可协作</span><span><strong>03</strong> 决策可复盘</span></div>
         </section>
-        <Card className="auth-card" bordered={false}>
+        <Card className="auth-card" variant="borderless">
           <button className="auth-return" type="button" onClick={() => navigate("/")}><ArrowLeftOutlined /> 返回官网</button>
           <div className="auth-heading"><p className="auth-kicker">WELCOME BACK</p><Typography.Title level={2}>回到你的研究现场</Typography.Title><Typography.Paragraph>登录后继续推进正在发生的投资判断。</Typography.Paragraph></div>
           <Form layout="vertical" onFinish={onFinish} requiredMark={false} size="large">

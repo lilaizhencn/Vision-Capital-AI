@@ -1,5 +1,5 @@
 import client from "./client";
-import type { ChatResponse, DashboardSummary, FileBatch, MonitoringUpdate, Project, ProjectFile, ProjectTask, Report, User } from "../types";
+import type { ChatResponse, DashboardSummary, FileBatch, MonitoringUpdate, Project, ProjectFile, ProjectTask, Report, ResearchWorkspace, User } from "../types";
 
 export async function register(payload: { email: string; username: string; password: string }) {
   const { data } = await client.post("/api/auth/register", payload);
@@ -153,5 +153,15 @@ export async function getProjectTasks(projectId: string) {
 
 export async function updateProjectTask(projectId: string, taskId: string, done: boolean) {
   const { data } = await client.patch<ProjectTask>(`/api/projects/${projectId}/tasks/${taskId}`, { done });
+  return data;
+}
+
+export async function getResearchWorkspace(projectId: string) {
+  const { data } = await client.get<ResearchWorkspace>(`/api/projects/${projectId}/research`);
+  return data;
+}
+
+export async function enrichProjectResearch(projectId: string) {
+  const { data } = await client.post<{ status: string; task_id?: string | null }>(`/api/projects/${projectId}/research/enrich`);
   return data;
 }

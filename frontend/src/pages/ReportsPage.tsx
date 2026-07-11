@@ -24,7 +24,7 @@ export function ReportsPage() {
     <Card className="glass-card">
       <Typography.Title level={2}>投研报告中心</Typography.Title>
       <Typography.Paragraph>在项目详情页生成的 AI 报告会成为这里的统一内容来源。</Typography.Paragraph>
-      {error && <Alert type="error" showIcon message={error} />}
+      {error && <Alert type="error" showIcon title={error} />}
       {loading ? <Spin /> : reports.length ? (
         <List
           dataSource={reports}

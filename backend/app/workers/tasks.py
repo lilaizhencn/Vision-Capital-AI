@@ -8,6 +8,7 @@ from tempfile import TemporaryDirectory
 from celery import chain
 from botocore.exceptions import EndpointConnectionError, ReadTimeoutError
 from openai import APIConnectionError, RateLimitError
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.ai.embedding_service import EmbeddingService
@@ -51,6 +52,17 @@ def parse_uploaded_file_task(file_id: str):
     return workflow.apply_async()
 
 
+@celery_app.task(name="enrich_project_research_task")
+def enrich_project_research_task(project_id: str, owner_id: str):
+    """Discover and ingest allowlisted public evidence for one owned project."""
+    db = SessionLocal()
+    try:
+        from app.services.research_service import ResearchService
+        return ResearchService(db).enrich(project_id, owner_id)
+    finally:
+        db.close()
+
+
 @celery_app.task(bind=True, name="validate_uploaded_file_task", autoretry_for=RETRYABLE_ERRORS, retry_backoff=True, retry_backoff_max=120, retry_kwargs={"max_retries": settings.max_parse_retries})
 def validate_uploaded_file_task(self, file_id: str):
     db = SessionLocal()
@@ -70,6 +82,26 @@ def validate_uploaded_file_task(self, file_id: str):
                 raise ValueError("Uploaded object checksum does not match the client-declared SHA-256")
             validate_file_signature(file.filename, header)
             file.checksum_sha256 = checksum
+            duplicate = db.scalar(
+                select(ProjectFile).where(
+                    ProjectFile.project_id == file.project_id,
+                    ProjectFile.id != file.id,
+                    ProjectFile.checksum_sha256 == checksum,
+                    ProjectFile.parse_status == ParseStatus.completed,
+                    ProjectFile.virus_scan_status == "clean",
+                ).limit(1)
+            )
+            if duplicate:
+                file.virus_scan_status = "clean"
+                file.virus_scan_result = f"deduplicated:{duplicate.id}"
+                file.extracted_data = {"duplicate_of": duplicate.id}
+                file.parse_status = ParseStatus.completed
+                file.parse_stage = ParseStage.completed
+                file.progress = 100
+                _complete_stage(db, file.id, ParseStage.validate)
+                db.commit()
+                _refresh_batch(db, file.batch_id)
+                return file_id
             scan_result = VirusScanner().scan_file(path)
         file.virus_scan_status = "clean" if scan_result != "skipped" else "skipped"
         file.virus_scan_result = scan_result
@@ -152,10 +184,11 @@ def persist_document_task(self, file_id: str):
             return file_id
         text = "\n\n".join(item for item in (file.parsed_text, file.table_text) if item)
         records: list[DocumentChunk] = []
+        embedding_service = EmbeddingService()
         for index, chunk in enumerate(chunk_text(text)):
             embedding = None
             try:
-                embedding = EmbeddingService().embed_text(chunk)
+                embedding = embedding_service.embed_text(chunk)
             except Exception:
                 # Embedding providers are optional for ingestion. The RAG layer
                 # falls back to recent project chunks when vectorization is unavailable.
@@ -167,6 +200,8 @@ def persist_document_task(self, file_id: str):
         file.progress = 100
         _complete_stage(db, file.id, ParseStage.persist)
         db.commit()
+        from app.services.research_service import ResearchService
+        ResearchService(db).refresh_requirements(file.project_id)
         _refresh_batch(db, file.batch_id)
         return file_id
     except Exception as exc:

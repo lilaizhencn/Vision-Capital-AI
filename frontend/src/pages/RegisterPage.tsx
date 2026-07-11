@@ -26,7 +26,7 @@ export function RegisterPage() {
           <div className="auth-story-copy"><p className="auth-kicker">BUILD YOUR INVESTMENT SYSTEM</p><Typography.Title>从一份资料，<em>开始一条主线。</em></Typography.Title><Typography.Paragraph>创建你的机构工作空间，让投前、投中与投后研究拥有连续的上下文。</Typography.Paragraph></div>
           <div className="auth-register-note"><span className="auth-note-number">V</span><div><strong>为认真做判断的团队而生</strong><p>研究创造认知，认知创造价值。</p></div></div>
         </section>
-        <Card className="auth-card" bordered={false}>
+        <Card className="auth-card" variant="borderless">
           <button className="auth-return" type="button" onClick={() => navigate("/")}><ArrowLeftOutlined /> 返回官网</button>
           <div className="auth-heading"><p className="auth-kicker">START WITH SIGNAL</p><Typography.Title level={2}>建立你的研究空间</Typography.Title><Typography.Paragraph>几分钟内，把团队的投资工作流放到同一张桌面上。</Typography.Paragraph></div>
           <Form layout="vertical" onFinish={onFinish} requiredMark={false} size="large">

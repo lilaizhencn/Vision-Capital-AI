@@ -10,10 +10,14 @@ const statusLabel: Record<string, string> = { pre_investment: "投前", in_progr
 
 export function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
   useEffect(() => {
-    void getDashboardSummary().then(setSummary).catch((reason: any) => message.error(reason?.response?.data?.detail ?? "无法加载工作台"));
+    void getDashboardSummary()
+      .then(setSummary)
+      .catch((reason: any) => message.error(reason?.response?.data?.detail ?? "无法加载工作台"))
+      .finally(() => setLoading(false));
   }, []);
 
   const projects = summary?.recent_projects ?? [];
@@ -27,14 +31,14 @@ export function DashboardPage() {
         <Button type="primary" icon={<PlusOutlined />} onClick={() => navigate("/projects")}>新建投资项目</Button>
       </section>
       <Row gutter={[14, 14]} className="metric-row">
-        <Col xs={24} sm={12} lg={6}><Card className="metric-card"><Statistic title="在投项目" value={summary?.total_projects ?? 0} prefix={<FileTextOutlined />} /><span className="metric-note">全部项目组合</span></Card></Col>
-        <Col xs={24} sm={12} lg={6}><Card className="metric-card"><Statistic title="待决策事项" value={needsAttention} prefix={<ClockCircleOutlined />} /><span className="metric-note accent-note">需要你的关注</span></Card></Col>
-        <Col xs={24} sm={12} lg={6}><Card className="metric-card"><Statistic title="本月新增项目" value={projects.length} prefix={<PlusOutlined />} /><span className="metric-note">来自最近项目</span></Card></Col>
-        <Col xs={24} sm={12} lg={6}><Card className="metric-card"><Statistic title="已解析资料" value={summary?.completed_files ?? 0} prefix={<SafetyCertificateOutlined />} /><span className="metric-note success-note">知识库持续更新</span></Card></Col>
+        <Col xs={24} sm={12} lg={6}><Card className="metric-card" loading={loading}><Statistic title="在投项目" value={summary?.total_projects ?? 0} prefix={<FileTextOutlined />} /><span className="metric-note">全部项目组合</span></Card></Col>
+        <Col xs={24} sm={12} lg={6}><Card className="metric-card" loading={loading}><Statistic title="待决策事项" value={needsAttention} prefix={<ClockCircleOutlined />} /><span className="metric-note accent-note">需要你的关注</span></Card></Col>
+        <Col xs={24} sm={12} lg={6}><Card className="metric-card" loading={loading}><Statistic title="本月新增项目" value={projects.length} prefix={<PlusOutlined />} /><span className="metric-note">来自最近项目</span></Card></Col>
+        <Col xs={24} sm={12} lg={6}><Card className="metric-card" loading={loading}><Statistic title="已解析资料" value={summary?.completed_files ?? 0} prefix={<SafetyCertificateOutlined />} /><span className="metric-note success-note">知识库持续更新</span></Card></Col>
       </Row>
       <Row gutter={[18, 18]}>
         <Col xs={24} xl={16}>
-          <Card className="workspace-panel stage-panel" title="投资全流程概览" extra={<Button type="link" onClick={() => navigate("/projects")}>查看全部项目 <ArrowRightOutlined /></Button>}>
+          <Card className="workspace-panel stage-panel" loading={loading} title="投资全流程概览" extra={<Button type="link" onClick={() => navigate("/projects")}>查看全部项目 <ArrowRightOutlined /></Button>}>
             <div className="stage-line">
               <StageItem label="Pre-投资" sub="初筛与尽调" value={summary?.pre_investment_projects ?? 0} active />
               <StageItem label="投资中" sub="跟踪与决策" value={summary?.in_progress_projects ?? 0} />
@@ -42,7 +46,7 @@ export function DashboardPage() {
               <StageItem label="已退出" sub="复盘与归档" value={0} />
             </div>
           </Card>
-          <Card className="workspace-panel featured-project-panel" title="重点项目" extra={<Button type="link" onClick={() => navigate("/projects")}>查看全部 <ArrowRightOutlined /></Button>}>
+          <Card className="workspace-panel featured-project-panel" loading={loading} title="重点项目" extra={<Button type="link" onClick={() => navigate("/projects")}>查看全部 <ArrowRightOutlined /></Button>}>
             {featured ? <FeaturedProject project={featured} onOpen={() => navigate(`/projects/${featured.id}`)} /> : <Empty description="创建第一个投资项目,开始构建你的投研工作台" />}
           </Card>
         </Col>

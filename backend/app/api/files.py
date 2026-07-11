@@ -139,7 +139,7 @@ def upload_file(
 def list_files(project_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
     project = ProjectRepository(db).get_for_owner(project_id, user.id)
     if not project:
-        return []
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     return FileRepository(db).list_for_project(project_id)
 
 

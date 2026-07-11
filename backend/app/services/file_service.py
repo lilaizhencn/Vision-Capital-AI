@@ -33,7 +33,7 @@ class FileService:
         content = upload_file.file.read(settings.max_upload_size_bytes + 1)
         if len(content) > settings.max_upload_size_bytes:
             raise HTTPException(status_code=413, detail="File exceeds the upload size limit")
-        object_key = f"{project_id}/{uuid.uuid4()}-{upload_file.filename}"
+        object_key = self._object_key(user.id, project_id, upload_file.filename)
         content_type = upload_file.content_type or mimetypes.guess_type(upload_file.filename)[0] or "application/octet-stream"
         stored = self.storage.upload_file(object_key=object_key, content=content, content_type=content_type)
 
@@ -67,8 +67,7 @@ class FileService:
         self.db.flush()
         sessions: list[UploadSession] = []
         for item in request.files:
-            safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", item.filename)[:160]
-            key = f"{project_id}/{batch.id}/{uuid.uuid4()}-{safe_name}"
+            key = self._object_key(user.id, project_id, item.filename)
             plan = self.storage.create_upload_plan(key, item.size, item.content_type)
             file = ProjectFile(
                 project_id=project_id, batch_id=batch.id, filename=item.filename,
@@ -186,3 +185,9 @@ class FileService:
         suffix = filename.lower().rsplit(".", 1)[-1] if "." in filename else ""
         if not filename.strip() or suffix not in allowed:
             raise HTTPException(status_code=415, detail="Unsupported or missing file extension")
+
+    @staticmethod
+    def _object_key(owner_id: str, project_id: str, filename: str) -> str:
+        suffix = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
+        safe_suffix = re.sub(r"[^a-z0-9]", "", suffix)[:10] or "bin"
+        return f"tenants/{owner_id}/{project_id}/{uuid.uuid4()}.{safe_suffix}"

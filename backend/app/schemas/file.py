@@ -24,6 +24,9 @@ class FileRead(BaseModel):
     virus_scan_status: str
     virus_scan_result: str | None
     extracted_data: dict[str, object] | None
+    source_kind: str
+    source_url: str | None
+    source_quality: str | None
     multipart_upload_id: str | None
     created_at: datetime
 

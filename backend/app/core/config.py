@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     ocr_model: str = "gpt-4o-mini"
     ocr_max_pages: int = 20
 
+    research_enabled: bool = True
+    research_max_sources_per_run: int = 8
+    research_download_max_bytes: int = 25 * 1024 * 1024
+    research_request_timeout_seconds: int = 20
+    research_user_agent: str = "VisionCapitalAI/1.0 research@vision.tokdou.com"
+
     local_storage_path: Path = Path("./storage_data")
     chunk_size: int = 1200
     chunk_overlap: int = 200
@@ -80,6 +86,8 @@ class Settings(BaseSettings):
             raise RuntimeError("Virus scanning must be enabled in production")
         if not self.llm_api_key:
             raise RuntimeError("LLM_API_KEY is required in production")
+        if "@" not in self.research_user_agent:
+            raise RuntimeError("RESEARCH_USER_AGENT must include a contact email in production")
 
     @property
     def local_storage_absolute_path(self) -> Path:

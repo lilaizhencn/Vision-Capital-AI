@@ -74,6 +74,9 @@ class ProjectFile(Base):
     virus_scan_status: Mapped[str] = mapped_column(String(32), default="pending", nullable=False)
     virus_scan_result: Mapped[str | None] = mapped_column(Text, nullable=True)
     extracted_data: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    source_kind: Mapped[str] = mapped_column(String(32), default="upload", nullable=False)
+    source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    source_quality: Mapped[str | None] = mapped_column(String(32), nullable=True)
     multipart_upload_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 

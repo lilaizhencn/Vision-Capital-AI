@@ -44,6 +44,9 @@ export interface ProjectFile {
   virus_scan_status?: string;
   virus_scan_result?: string | null;
   extracted_data?: Record<string, unknown> | null;
+  source_kind?: "upload" | "public_research";
+  source_url?: string | null;
+  source_quality?: string | null;
   multipart_upload_id?: string | null;
   created_at: string;
 }
@@ -74,11 +77,51 @@ export interface Citation {
   file_id: string;
   filename: string;
   content: string;
+  source_kind: string;
+  source_url?: string | null;
+  source_quality?: string | null;
 }
 
 export interface ChatResponse {
   answer: string;
   citations: Citation[];
+  confidence: "low" | "medium" | "high";
+  missing_evidence: string[];
+}
+
+export interface EvidenceRequirement {
+  id: string;
+  project_id: string;
+  category: string;
+  label: string;
+  status: "missing" | "partial" | "covered";
+  priority: string;
+  reason: string;
+  suggested_document: string;
+  updated_at: string;
+}
+
+export interface ResearchSource {
+  id: string;
+  project_id: string;
+  file_id?: string | null;
+  evidence_category: string;
+  title: string;
+  publisher: string;
+  domain: string;
+  url: string;
+  snippet: string;
+  quality: string;
+  status: "discovered" | "ingested" | "review_required" | "failed";
+  error?: string | null;
+  discovered_at: string;
+  fetched_at?: string | null;
+}
+
+export interface ResearchWorkspace {
+  requirements: EvidenceRequirement[];
+  sources: ResearchSource[];
+  enrichment_running: boolean;
 }
 
 export interface Report {

@@ -30,7 +30,7 @@ export function RiskMonitoringPage() {
       <Card className="workspace-panel" title="风险事件">
         {!loading && !projects.length ? <Empty description="创建项目后,风险信号会在这里汇总" /> : <List dataSource={updates.slice(0, 10)} locale={{ emptyText: "还没有投后监控记录" }} renderItem={(item) => <List.Item actions={[<Link to={`/projects/${item.project.id}`}>查看项目</Link>]}><List.Item.Meta title={<SpaceRiskTitle project={item.project} risk={item.risk_level} />} description={`${item.metric_name}: ${item.metric_value}${item.metric_unit} · ${item.note || "暂无备注"}`} /></List.Item>} />}
       </Card>
-      <Alert type="info" showIcon message="风险中心会随着项目资料、AI 分析和报告更新自动刷新。" />
+      <Alert type="info" showIcon title="风险中心会随着项目资料、AI 分析和报告更新自动刷新。" />
     </div>
   );
 }

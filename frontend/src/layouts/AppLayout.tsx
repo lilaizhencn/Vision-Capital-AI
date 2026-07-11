@@ -56,7 +56,7 @@ function GlobalAssistant({ open, onClose }: { open: boolean; onClose: () => void
   };
 
   return (
-    <Drawer open={open} onClose={onClose} width={420} title="AI 投研助手" className="assistant-drawer">
+    <Drawer open={open} onClose={onClose} size={420} title="AI 投研助手" className="assistant-drawer">
       <div className="drawer-intro">
         <span className="eyebrow">CONTEXTUAL RESEARCH</span>
         <Typography.Title level={3}>把问题变成下一步行动</Typography.Title>

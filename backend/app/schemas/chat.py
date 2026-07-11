@@ -11,11 +11,16 @@ class Citation(BaseModel):
     file_id: str
     filename: str
     content: str
+    source_kind: str = "upload"
+    source_url: str | None = None
+    source_quality: str | None = None
 
 
 class ChatResponse(BaseModel):
     answer: str
     citations: list[Citation]
+    confidence: str
+    missing_evidence: list[str]
 
 
 class ChatMessageRead(BaseModel):
@@ -26,4 +31,3 @@ class ChatMessageRead(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
-
