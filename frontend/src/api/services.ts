@@ -165,3 +165,10 @@ export async function enrichProjectResearch(projectId: string) {
   const { data } = await client.post<{ status: string; task_id?: string | null }>(`/api/projects/${projectId}/research/enrich`);
   return data;
 }
+
+export async function updateResearchSettings(projectId: string, autoEnabled: boolean) {
+  const { data } = await client.patch<ResearchWorkspace>(`/api/projects/${projectId}/research/settings`, {
+    auto_enabled: autoEnabled,
+  });
+  return data;
+}

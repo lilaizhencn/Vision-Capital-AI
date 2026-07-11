@@ -15,3 +15,9 @@ celery_app.conf.task_eager_propagates = True
 celery_app.conf.task_acks_late = True
 celery_app.conf.task_reject_on_worker_lost = True
 celery_app.conf.worker_prefetch_multiplier = 1
+celery_app.conf.beat_schedule = {
+    "schedule-due-project-research": {
+        "task": "schedule_due_project_research_task",
+        "schedule": 600.0,
+    },
+}

@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import hashlib
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from celery import chain
 from botocore.exceptions import EndpointConnectionError, ReadTimeoutError
 from openai import APIConnectionError, RateLimitError
-from sqlalchemy import select
+from redis import Redis
+from redis.exceptions import LockError
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.ai.embedding_service import EmbeddingService
@@ -17,6 +19,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.chunk import DocumentChunk
 from app.models.file import BatchStatus, DocumentBatch, ParseDeadLetter, ParseStage, ParseStageRun, ParseStatus, ProjectFile
+from app.models.project import Project
 from app.repositories.chunk_repository import ChunkRepository
 from app.repositories.file_repository import FileRepository
 from app.rag.chunking import chunk_text, estimate_tokens
@@ -55,10 +58,84 @@ def parse_uploaded_file_task(file_id: str):
 @celery_app.task(name="enrich_project_research_task")
 def enrich_project_research_task(project_id: str, owner_id: str):
     """Discover and ingest allowlisted public evidence for one owned project."""
+    lock = Redis.from_url(settings.redis_url).lock(
+        f"research:project:{project_id}",
+        timeout=settings.research_lock_timeout_seconds,
+        blocking=False,
+    )
+    if not lock.acquire(blocking=False):
+        return {"status": "already_running"}
     db = SessionLocal()
     try:
         from app.services.research_service import ResearchService
-        return ResearchService(db).enrich(project_id, owner_id)
+        project = db.scalar(select(Project).where(Project.id == project_id, Project.owner_id == owner_id))
+        if not project:
+            return {"status": "not_found"}
+        project.research_status = "running"
+        project.research_last_error = None
+        db.commit()
+        result = ResearchService(db).enrich(project_id, owner_id)
+        now = datetime.now(timezone.utc)
+        project.research_status = "idle"
+        project.last_research_at = now
+        project.next_research_at = now + timedelta(hours=settings.research_refresh_interval_hours)
+        db.commit()
+        return {"status": "completed", **result}
+    except Exception as exc:
+        db.rollback()
+        project = db.scalar(select(Project).where(Project.id == project_id, Project.owner_id == owner_id))
+        if project:
+            project.research_status = "failed"
+            project.research_last_error = str(exc).replace("\x00", "")[:2000]
+            project.next_research_at = datetime.now(timezone.utc) + timedelta(hours=settings.research_failure_retry_hours)
+            db.commit()
+        raise
+    finally:
+        db.close()
+        try:
+            lock.release()
+        except LockError:
+            pass
+
+
+@celery_app.task(name="schedule_due_project_research_task")
+def schedule_due_project_research_task() -> dict[str, int]:
+    """Queue due tenant projects in bounded batches; per-project workers hold the execution lock."""
+    if not settings.research_auto_enrich_enabled:
+        return {"queued": 0}
+    db = SessionLocal()
+    queued = 0
+    try:
+        now = datetime.now(timezone.utc)
+        stale_queued = now - timedelta(minutes=15)
+        projects = list(db.scalars(
+            select(Project)
+            .where(
+                Project.research_auto_enabled.is_(True),
+                Project.next_research_at.is_not(None),
+                Project.next_research_at <= now,
+                or_(
+                    Project.research_status.in_(("idle", "failed")),
+                    (Project.research_status == "queued") & (Project.updated_at <= stale_queued),
+                ),
+            )
+            .order_by(Project.next_research_at)
+            .limit(settings.research_scheduler_batch_size)
+        ))
+        for project in projects:
+            project.research_status = "queued"
+            project.research_last_error = None
+        db.commit()
+        for project in projects:
+            try:
+                enrich_project_research_task.delay(project.id, project.owner_id)
+                queued += 1
+            except Exception as exc:
+                project.research_status = "failed"
+                project.research_last_error = f"Unable to queue scheduled research: {exc}"[:2000]
+                project.next_research_at = now + timedelta(hours=settings.research_failure_retry_hours)
+                db.commit()
+        return {"queued": queued}
     finally:
         db.close()
 

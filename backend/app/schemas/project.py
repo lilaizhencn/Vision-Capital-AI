@@ -12,6 +12,7 @@ class ProjectBase(BaseModel):
     stage: str
     description: str = ""
     investment_status: InvestmentStatus = InvestmentStatus.pre_investment
+    research_auto_enabled: bool = True
 
 
 class ProjectCreate(ProjectBase):
@@ -27,6 +28,9 @@ class ProjectRead(ProjectBase):
     owner_id: str
     created_at: datetime
     updated_at: datetime
+    research_status: str
+    last_research_at: datetime | None
+    next_research_at: datetime | None
+    research_last_error: str | None
 
     model_config = {"from_attributes": True}
-

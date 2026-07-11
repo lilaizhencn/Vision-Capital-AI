@@ -12,6 +12,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import httpx
+import fitz
 from ddgs import DDGS
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -51,6 +52,18 @@ SEARCH_TERMS = {
     "customers": "customers contracts retention annual report",
     "valuation": "valuation transaction filing",
 }
+
+CATEGORY_RELEVANCE_TERMS = {
+    "business": ("business model", "product", "revenue model", "产品", "商业模式"),
+    "financial": ("financial", "revenue", "cash flow", "balance sheet", "财务", "现金流"),
+    "competition": ("competition", "competitor", "market share", "竞争", "市场份额"),
+    "team": ("management", "director", "governance", "管理层", "治理"),
+    "legal": ("regulation", "litigation", "patent", "compliance", "合规", "诉讼", "专利"),
+    "customers": ("customer", "contract", "retention", "客户", "合同"),
+    "valuation": ("valuation", "transaction", "offering", "enterprise value", "估值", "交易"),
+}
+
+INDUSTRY_STOP_WORDS = {"and", "the", "with", "industry", "sector", "company", "services"}
 
 
 class _TextExtractor(HTMLParser):
@@ -161,6 +174,8 @@ class ResearchService:
             snippet = str(result.get("body") or "")[:4000]
             domain = (urlparse(url).hostname or "").lower()
             trusted = expected_trusted and self._is_trusted_domain(domain)
+            if trusted and not self._result_is_relevant(project, gap.category, result):
+                continue
             source = ResearchSource(
                 project_id=project_id, evidence_category=gap.category, title=title,
                 publisher=domain, domain=domain, url=url, url_hash=self._hash_url(url), snippet=snippet,
@@ -218,6 +233,7 @@ class ResearchService:
         content_type = response.headers.get("content-type", "").split(";", 1)[0].lower()
         suffix = Path(urlparse(str(response.url)).path).suffix.lower()
         if content_type == "application/pdf" or suffix == ".pdf":
+            readable_text = self._pdf_preview_text(content)
             filename = self._safe_filename(source.title, ".pdf")
             stored_content = content
             stored_type = "application/pdf"
@@ -232,6 +248,8 @@ class ResearchService:
             stored_type = "text/plain"
         else:
             raise ValueError(f"Unsupported research content type: {content_type or 'unknown'}")
+        if not self._content_is_relevant(project, source.evidence_category, readable_text if stored_type == "application/pdf" else text):
+            raise ValueError("Official source does not contain enough project-relevant evidence")
         key = f"tenants/{owner_id}/{project.id}/research/{uuid.uuid4()}{Path(filename).suffix}"
         stored = get_storage_service().upload_file(key, stored_content, stored_type)
         file = ProjectFile(
@@ -256,6 +274,60 @@ class ResearchService:
         return self.db.scalar(select(ResearchSource.id).where(
             ResearchSource.project_id == project_id, ResearchSource.url_hash == self._hash_url(url)
         )) is not None
+
+    @classmethod
+    def _result_is_relevant(cls, project: Project, category: str, result: dict) -> bool:
+        haystack = " ".join(str(result.get(key) or "") for key in ("title", "body", "href", "url"))
+        normalized = cls._normalize_relevance_text(haystack)
+        if category == "market":
+            return cls._market_content_is_relevant(project.industry, normalized)
+        return any(alias in normalized for alias in cls._company_aliases(project.company_name))
+
+    @classmethod
+    def _content_is_relevant(cls, project: Project, category: str, content: str) -> bool:
+        normalized = cls._normalize_relevance_text(content)
+        if category != "market":
+            aliases = cls._company_aliases(project.company_name)
+            company_mentions = max((normalized.count(alias) for alias in aliases), default=0)
+            category_terms = CATEGORY_RELEVANCE_TERMS.get(category, ())
+            category_match = any(cls._normalize_relevance_text(term) in normalized for term in category_terms)
+            return company_mentions >= 2 and category_match
+        return cls._market_content_is_relevant(project.industry, normalized)
+
+    @classmethod
+    def _market_content_is_relevant(cls, industry: str, normalized_content: str) -> bool:
+        terms = {
+            cls._normalize_relevance_text(term)
+            for term in re.split(r"[\s,/&|()-]+", industry)
+            if len(cls._normalize_relevance_text(term)) >= 4 and term.lower() not in INDUSTRY_STOP_WORDS
+        }
+        required_matches = min(2, len(terms))
+        return bool(terms) and sum(term in normalized_content for term in terms) >= required_matches
+
+    @staticmethod
+    def _normalize_relevance_text(value: str) -> str:
+        return re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "", value.lower())
+
+    @classmethod
+    def _company_aliases(cls, company_name: str) -> set[str]:
+        base = re.sub(
+            r"\b(incorporated|corporation|company|limited|holdings?|group|inc|corp|ltd|llc|plc)\.?\b",
+            " ",
+            company_name,
+            flags=re.IGNORECASE,
+        )
+        return {
+            alias for alias in (cls._normalize_relevance_text(company_name), cls._normalize_relevance_text(base))
+            if len(alias) >= 4
+        }
+
+    @staticmethod
+    def _pdf_preview_text(content: bytes) -> str:
+        try:
+            with fitz.open(stream=content, filetype="pdf") as document:
+                return "\n".join(document.load_page(index).get_text("text") for index in range(min(20, document.page_count)))
+        except Exception as exc:
+            raise ValueError("Official PDF could not be inspected for relevance") from exc
 
     @staticmethod
     def _hash_url(url: str) -> str:

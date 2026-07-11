@@ -21,6 +21,7 @@ class ChatResponse(BaseModel):
     citations: list[Citation]
     confidence: str
     missing_evidence: list[str]
+    evidence_control_passed: bool | None = None
 
 
 class ChatMessageRead(BaseModel):

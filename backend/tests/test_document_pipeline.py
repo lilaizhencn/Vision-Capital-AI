@@ -263,6 +263,7 @@ def api_client(tmp_path, monkeypatch):
     monkeypatch.setattr(websocket_api, "SessionLocal", TestSession)
     monkeypatch.setattr(settings, "local_storage_path", tmp_path)
     monkeypatch.setattr(settings, "celery_task_always_eager", True)
+    monkeypatch.setattr(settings, "research_auto_enrich_enabled", False)
     eager_parse = lambda file_id: tasks.parse_uploaded_file_task.run(file_id)
     monkeypatch.setattr(file_service, "parse_uploaded_file_task", SimpleNamespace(delay=eager_parse))
     client = TestClient(app)
@@ -496,6 +497,19 @@ def test_research_trust_allowlist_rejects_lookalike_domains() -> None:
     assert not ResearchService._is_trusted_domain("example.com")
 
 
+def test_research_relevance_rejects_authoritative_but_unrelated_results() -> None:
+    from app.services.research_service import ResearchService
+
+    project = SimpleNamespace(company_name="Moderna, Inc.", industry="Biotechnology")
+    assert ResearchService._content_is_relevant(project, "financial", "Moderna annual report. Moderna reported cash flow.")
+    assert not ResearchService._content_is_relevant(project, "financial", "Another issuer annual report")
+    assert ResearchService._content_is_relevant(project, "market", "Global biotechnology sector outlook")
+    assert not ResearchService._content_is_relevant(project, "market", "Maritime transport industry outlook")
+    broad_project = SimpleNamespace(company_name="Snowflake Inc.", industry="Enterprise software and AI data cloud")
+    assert not ResearchService._content_is_relevant(broad_project, "market", "Enterprise survey overview")
+    assert ResearchService._content_is_relevant(broad_project, "market", "Enterprise software and cloud market outlook")
+
+
 def test_monitoring_updates_are_persisted_and_owner_scoped(api_client) -> None:
     token = api_client.post("/api/auth/register", json={"email": "monitor@example.com", "username": "monitor", "password": "strong-password"}).json()["access_token"]
     headers = {"Authorization": f"Bearer {token}"}
@@ -611,3 +625,38 @@ def test_strategy_numeric_guard_removes_values_absent_from_evidence() -> None:
     assert "120" in guarded
     assert "65%" not in guarded
     assert "保持定性观察" in guarded
+
+
+def test_strategy_answer_falls_back_when_evidence_control_does_not_pass() -> None:
+    from app.services.chat_service import ChatService
+
+    service = ChatService.__new__(ChatService)
+    service.llm_service = SimpleNamespace(generate=lambda _prompt: '{"revised_answer":"Unsupported claim","removed_or_reframed_claims":[],"evidence_control_passed":false}')
+
+    answer, passed = service._ground_strategy_answer(
+        SimpleNamespace(company_name="Acme", industry="SaaS", stage="Seed"),
+        "investment strategy",
+        ["[filing.txt] Revenue was 120."],
+        ["Audited financial statements are missing"],
+    )
+
+    assert passed is False
+    assert "Unsupported claim" not in answer
+    assert "Audited financial statements are missing" in answer
+
+
+def test_strategy_answer_requires_explicit_true_evidence_control() -> None:
+    from app.services.chat_service import ChatService
+
+    service = ChatService.__new__(ChatService)
+    service.llm_service = SimpleNamespace(generate=lambda _prompt: '{"revised_answer":"Revenue was 120 [filing.txt]","removed_or_reframed_claims":[],"evidence_control_passed":true}')
+
+    answer, passed = service._ground_strategy_answer(
+        SimpleNamespace(company_name="Acme", industry="SaaS", stage="Seed"),
+        "investment strategy",
+        ["[filing.txt] Revenue was 120."],
+        [],
+    )
+
+    assert passed is True
+    assert "Revenue was 120" in answer

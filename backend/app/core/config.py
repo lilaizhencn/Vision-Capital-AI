@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     research_download_max_bytes: int = 25 * 1024 * 1024
     research_request_timeout_seconds: int = 20
     research_user_agent: str = "VisionCapitalAI/1.0 research@vision.tokdou.com"
+    research_auto_enrich_enabled: bool = True
+    research_refresh_interval_hours: int = 168
+    research_failure_retry_hours: int = 6
+    research_lock_timeout_seconds: int = 1800
+    research_scheduler_batch_size: int = 50
 
     local_storage_path: Path = Path("./storage_data")
     chunk_size: int = 1200

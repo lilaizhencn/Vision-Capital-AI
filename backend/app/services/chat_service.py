@@ -54,13 +54,20 @@ class ChatService:
             for item in requirements if item.status.value != "covered"
         ]
         self.chat_repo.create(project_id=project_id, role="user", content=message)
+        evidence_control_passed = None
         if is_strategy_question:
-            answer = self._ground_strategy_answer(project, message, context_parts, missing_evidence)
+            answer, evidence_control_passed = self._ground_strategy_answer(project, message, context_parts, missing_evidence)
         else:
             answer = self.llm_service.generate(self._standard_prompt(project, message, context_parts, missing_evidence))
         self.chat_repo.create(project_id=project_id, role="assistant", content=answer)
         confidence = "high" if len(citations) >= 8 and len(missing_evidence) <= 2 else "medium" if len(citations) >= 3 else "low"
-        return ChatResponse(answer=answer, citations=citations, confidence=confidence, missing_evidence=missing_evidence)
+        return ChatResponse(
+            answer=answer,
+            citations=citations,
+            confidence=confidence,
+            missing_evidence=missing_evidence,
+            evidence_control_passed=evidence_control_passed,
+        )
 
     @staticmethod
     def _is_strategy_question(message: str) -> bool:
@@ -96,7 +103,9 @@ Materials:
 {chr(10).join(context_parts)}
 """.strip()
 
-    def _ground_strategy_answer(self, project, message: str, context_parts: list[str], missing_evidence: list[str]) -> str:
+    def _ground_strategy_answer(
+        self, project, message: str, context_parts: list[str], missing_evidence: list[str]
+    ) -> tuple[str, bool]:
         prompt = f"""
 You are the final evidence-control analyst for an institutional investment committee. Generate the answer directly and
 only from the evidence pack below. Do not use outside knowledge, memory, or assumptions about the company or industry.
@@ -140,11 +149,17 @@ EVIDENCE PACK:
             cleaned = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
             result = json.loads(cleaned)
             revised = result.get("revised_answer") if isinstance(result, dict) else None
+            passed = result.get("evidence_control_passed") if isinstance(result, dict) else None
             if not isinstance(revised, str) or not revised.strip():
                 raise RuntimeError("Evidence-controlled strategy response was malformed")
-            return self._remove_unsupported_numeric_lines(revised.strip(), context_parts)
+            if passed is not True:
+                raise RuntimeError("Evidence control did not pass")
+            guarded = self._remove_unsupported_numeric_lines(revised.strip(), context_parts)
+            if not guarded:
+                raise RuntimeError("Evidence control removed the complete response")
+            return guarded, True
         except (RuntimeError, json.JSONDecodeError):
-            return self._fallback_strategy_answer(missing_evidence)
+            return self._fallback_strategy_answer(missing_evidence), False
 
     @staticmethod
     def _fallback_strategy_answer(missing_evidence: list[str]) -> str:

@@ -21,6 +21,11 @@ export interface Project {
   stage: string;
   description: string;
   investment_status: InvestmentStatus;
+  research_auto_enabled: boolean;
+  research_status: string;
+  last_research_at?: string | null;
+  next_research_at?: string | null;
+  research_last_error?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -87,6 +92,7 @@ export interface ChatResponse {
   citations: Citation[];
   confidence: "low" | "medium" | "high";
   missing_evidence: string[];
+  evidence_control_passed?: boolean | null;
 }
 
 export interface EvidenceRequirement {
@@ -122,6 +128,11 @@ export interface ResearchWorkspace {
   requirements: EvidenceRequirement[];
   sources: ResearchSource[];
   enrichment_running: boolean;
+  auto_enabled: boolean;
+  status: string;
+  last_research_at?: string | null;
+  next_research_at?: string | null;
+  last_error?: string | null;
 }
 
 export interface Report {

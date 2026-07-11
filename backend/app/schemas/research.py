@@ -42,6 +42,15 @@ class ResearchWorkspaceRead(BaseModel):
     requirements: list[EvidenceRequirementRead]
     sources: list[ResearchSourceRead]
     enrichment_running: bool = False
+    auto_enabled: bool = True
+    status: str = "idle"
+    last_research_at: datetime | None = None
+    next_research_at: datetime | None = None
+    last_error: str | None = None
+
+
+class ResearchSettingsUpdate(BaseModel):
+    auto_enabled: bool
 
 
 class EnrichmentResponse(BaseModel):
