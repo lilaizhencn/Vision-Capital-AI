@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 from io import BytesIO
 import logging
+from pathlib import Path
 
 from openai import OpenAI
 
@@ -46,6 +47,9 @@ class OCRService:
             from PIL import Image
         except ImportError as exc:
             raise RuntimeError("OCR requires a vision model or the local Tesseract dependencies") from exc
+        windows_tesseract = Path("C:/Program Files/Tesseract-OCR/tesseract.exe")
+        if windows_tesseract.exists():
+            pytesseract.pytesseract.tesseract_cmd = str(windows_tesseract)
         try:
             with Image.open(BytesIO(data)) as image:
                 return pytesseract.image_to_string(image, config="--psm 6").strip()

@@ -7,6 +7,19 @@ import { useParams } from "react-router-dom";
 import { askProject, completeFileBatch, completeMultipart, createFileBatch, createMonitoringUpdate, generateReport, getFileBatch, getMonitoringUpdates, getMultipartPartUrl, getProject, getProjectFiles, getProjectTasks, getReports, getUploadedParts, retryFile, updateProjectTask, uploadBatchFileContent, uploadMultipartPartContent } from "../api/services";
 import type { ChatResponse, MonitoringUpdate, Project, ProjectFile, ProjectTask, Report } from "../types";
 
+type BatchProgressPayload = {
+  progress: number;
+  status: string;
+  files?: Array<{
+    id: string;
+    filename: string;
+    status: string;
+    stage: string;
+    progress: number;
+    error?: string | null;
+  }>;
+};
+
 export function ProjectDetailPage() {
   const { projectId = "" } = useParams();
   const [project, setProject] = useState<Project | null>(null);
@@ -53,6 +66,44 @@ export function ProjectDetailPage() {
 
   useEffect(() => { void load(); }, [projectId]);
 
+  const applyBatchProgress = (payload: BatchProgressPayload, activeBatchId: string) => {
+    if (!payload.files?.length) return;
+    setFiles((currentFiles) => {
+      const nextFiles = [...currentFiles];
+      const indexById = new Map(nextFiles.map((file, index) => [file.id, index]));
+      for (const update of payload.files ?? []) {
+        const existingIndex = indexById.get(update.id);
+        if (existingIndex === undefined) {
+          indexById.set(update.id, nextFiles.length);
+          nextFiles.push({
+            id: update.id,
+            project_id: projectId,
+            batch_id: activeBatchId,
+            filename: update.filename,
+            content_type: "application/octet-stream",
+            size: 0,
+            r2_object_key: "",
+            parse_status: update.status,
+            parse_stage: update.stage,
+            progress: update.progress,
+            parse_error: update.error ?? null,
+            retry_count: 0,
+            created_at: new Date().toISOString(),
+          });
+          continue;
+        }
+        nextFiles[existingIndex] = {
+          ...nextFiles[existingIndex],
+          parse_status: update.status,
+          parse_stage: update.stage,
+          progress: update.progress,
+          parse_error: update.error ?? null,
+        };
+      }
+      return nextFiles;
+    });
+  };
+
   useEffect(() => {
     if (!batchId) return;
     const token = localStorage.getItem("vision_capital_ai_token");
@@ -63,8 +114,9 @@ export function ProjectDetailPage() {
     const socket = new WebSocket(`${base}/api/ws/batches/${batchId}?token=${encodeURIComponent(token ?? "")}`);
     socket.onmessage = (event) => {
       try {
-        const payload = JSON.parse(event.data) as { progress: number; status: string };
+        const payload = JSON.parse(event.data) as BatchProgressPayload;
         setBatchProgress(payload.progress);
+        applyBatchProgress(payload, batchId);
         if (payload.status === "completed" || payload.status === "failed") void load();
       } catch {
         message.warning("实时进度消息格式无效,页面将继续刷新状态");
@@ -99,6 +151,7 @@ export function ProjectDetailPage() {
         const candidate = await getFileBatch(manifest.batchId);
         if (candidate.status === "uploading") {
           setBatchId(candidate.id);
+          setFiles((currentFiles) => [...currentFiles.filter((file) => file.batch_id !== candidate.id), ...candidate.files]);
           setResumableBatch(candidate);
           message.info("已恢复未完成的上传批次");
           setResuming(false);
@@ -122,6 +175,7 @@ export function ProjectDetailPage() {
         localStorage.setItem(`vision-capital-ai:batch:${batch.id}:manifest`, JSON.stringify({ batchId: batch.id, files: localFiles.map((file) => `${file.name}:${file.size}:${file.lastModified}`) }));
       }
       setBatchId(batch.id);
+      setFiles((currentFiles) => [...currentFiles.filter((file) => file.batch_id !== batch.id), ...batch.files]);
       const availableFiles = new Map<string, typeof batch.files>();
       for (const fileRecord of batch.files) {
         const key = `${fileRecord.filename}:${fileRecord.size}`;
