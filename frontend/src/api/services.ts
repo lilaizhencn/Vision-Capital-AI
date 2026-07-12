@@ -1,5 +1,5 @@
 import client from "./client";
-import type { ChatResponse, DashboardSummary, FileBatch, MonitoringUpdate, Project, ProjectFile, ProjectTask, Report, ResearchWorkspace, User } from "../types";
+import type { ChatResponse, DashboardSummary, FileBatch, MonitoringUpdate, Project, ProjectFile, ProjectTask, ProjectTaskInput, Report, RequirementDetail, ResearchWorkspace, User } from "../types";
 
 export async function register(payload: { email: string; username: string; password: string }) {
   const { data } = await client.post("/api/auth/register", payload);
@@ -151,14 +151,36 @@ export async function getProjectTasks(projectId: string) {
   return data;
 }
 
-export async function updateProjectTask(projectId: string, taskId: string, done: boolean) {
-  const { data } = await client.patch<ProjectTask>(`/api/projects/${projectId}/tasks/${taskId}`, { done });
+export async function createProjectTask(projectId: string, payload: ProjectTaskInput & { label: string }) {
+  const { data } = await client.post<ProjectTask>(`/api/projects/${projectId}/tasks`, payload);
+  return data;
+}
+
+export async function updateProjectTask(projectId: string, taskId: string, payload: ProjectTaskInput) {
+  const { data } = await client.patch<ProjectTask>(`/api/projects/${projectId}/tasks/${taskId}`, payload);
   return data;
 }
 
 export async function getResearchWorkspace(projectId: string) {
   const { data } = await client.get<ResearchWorkspace>(`/api/projects/${projectId}/research`);
   return data;
+}
+
+export async function getRequirementDetail(projectId: string, requirementId: string) {
+  const { data } = await client.get<RequirementDetail>(`/api/projects/${projectId}/research/requirements/${requirementId}`);
+  return data;
+}
+
+export async function downloadProjectFile(file: ProjectFile) {
+  const response = await client.get<Blob>(`/api/files/${file.id}/download`, { responseType: "blob" });
+  const url = URL.createObjectURL(response.data);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = file.filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export async function enrichProjectResearch(projectId: string) {

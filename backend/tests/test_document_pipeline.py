@@ -328,6 +328,10 @@ def test_auth_project_upload_and_parse_flow(api_client) -> None:
     assert listed.json()[0]["filename"] == "memo.txt"
     assert listed.json()[0]["parse_status"] == "completed"
     assert listed.json()[0]["progress"] == 100
+    downloaded = api_client.get(f"/api/files/{listed.json()[0]['id']}/download", headers=headers)
+    assert downloaded.status_code == 200
+    assert downloaded.content == b"Revenue grew 20 percent"
+    assert "attachment" in downloaded.headers["content-disposition"]
 
 
 def test_single_upload_enforces_maximum_size(api_client, monkeypatch) -> None:
@@ -596,9 +600,90 @@ def test_project_tasks_are_persisted_and_owner_scoped(api_client) -> None:
     assert listed.status_code == 200
     assert len(listed.json()) == 3
     task = listed.json()[0]
-    updated = api_client.patch(f"/api/projects/{project_id}/tasks/{task['id']}", headers=headers, json={"done": True})
+    rejected = api_client.patch(f"/api/projects/{project_id}/tasks/{task['id']}", headers=headers, json={"done": True})
+    assert rejected.status_code == 400
+    updated = api_client.patch(
+        f"/api/projects/{project_id}/tasks/{task['id']}",
+        headers=headers,
+        json={"status": "completed", "result": "Management biographies were reconciled to the proxy filing."},
+    )
     assert updated.status_code == 200
     assert updated.json()["done"] is True
+    assert updated.json()["status"] == "completed"
+    assert updated.json()["completed_at"] is not None
+
+
+def test_requirement_detail_exposes_fields_evidence_and_task_link(api_client) -> None:
+    token = api_client.post(
+        "/api/auth/register",
+        json={"email": "requirement@example.com", "username": "requirement", "password": "strong-password"},
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    project_id = api_client.post(
+        "/api/projects",
+        headers=headers,
+        json={"name": "Requirement QA", "company_name": "Acme", "industry": "SaaS", "stage": "Seed"},
+    ).json()["id"]
+    uploaded = api_client.post(
+        f"/api/projects/{project_id}/files/upload",
+        headers=headers,
+        files={"upload_file": (
+            "team.txt",
+            b"Chief Executive Officer Jane Doe has 20 years of management experience. The Board of Directors includes independent directors.",
+            "text/plain",
+        )},
+    )
+    file_id = uploaded.json()["file"]["id"]
+    workspace = api_client.get(f"/api/projects/{project_id}/research", headers=headers).json()
+    team = next(item for item in workspace["requirements"] if item["category"] == "team")
+
+    detail = api_client.get(
+        f"/api/projects/{project_id}/research/requirements/{team['id']}", headers=headers
+    )
+    assert detail.status_code == 200
+    assert any(field["status"] == "found" for field in detail.json()["fields"])
+    assert detail.json()["related_files"][0]["id"] == file_id
+
+    rejected = api_client.post(
+        f"/api/projects/{project_id}/tasks",
+        headers=headers,
+        json={"label": "Incomplete QA", "status": "completed"},
+    )
+    assert rejected.status_code == 400
+
+    created = api_client.post(
+        f"/api/projects/{project_id}/tasks",
+        headers=headers,
+        json={
+            "label": "核验核心管理层履历",
+            "description": "逐项核验管理层任职经历与董事会独立性。",
+            "assignee": "Investment research",
+            "due_date": "2026-07-31",
+            "status": "completed",
+            "result": "Management biographies were checked against the filing.",
+            "evidence_file_ids": [file_id],
+            "related_requirement_id": team["id"],
+        },
+    )
+    assert created.status_code == 201
+    assert created.json()["related_requirement_id"] == team["id"]
+    assert created.json()["status"] == "completed"
+    assert created.json()["done"] is True
+    assert created.json()["evidence_file_ids"] == [file_id]
+    assert created.json()["completed_at"] is not None
+
+
+def test_requirement_detail_rejects_filing_table_of_contents_as_evidence() -> None:
+    from app.services.research_service import ResearchService
+
+    content = (
+        "Part III Item 10 Directors, Executive Officers and Corporate Governance 82 "
+        "Item 11 Executive Compensation 82 Item 12 Security Ownership of Certain Beneficial Owners 82"
+    )
+    assert ResearchService._is_substantive_evidence(content) is False
+    assert ResearchService._is_substantive_evidence(
+        "The compensation committee approved a three-year long-term incentive award for the executive team."
+    ) is True
 
 
 def test_chat_falls_back_to_recent_chunks_when_embeddings_are_unavailable(api_client, monkeypatch) -> None:

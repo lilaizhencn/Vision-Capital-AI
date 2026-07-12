@@ -46,6 +46,12 @@ class LocalStorageService:
         with (self.base_path / object_key).open("rb") as source, destination.open("wb") as target:
             shutil.copyfileobj(source, target, length=1024 * 1024)
 
+    def open_download(self, object_key: str):
+        path = (self.base_path / object_key).resolve()
+        if not path.is_relative_to(self.base_path.resolve()):
+            raise FileNotFoundError(object_key)
+        return path.open("rb")
+
     def delete_file(self, object_key: str) -> None:
         path = self.base_path / object_key
         if path.exists():
@@ -95,6 +101,9 @@ class R2StorageService:
         response = self.client.get_object(Bucket=self.bucket, Key=object_key)
         with destination.open("wb") as target:
             shutil.copyfileobj(response["Body"], target, length=1024 * 1024)
+
+    def open_download(self, object_key: str):
+        return self.client.get_object(Bucket=self.bucket, Key=object_key)["Body"]
 
     def delete_file(self, object_key: str) -> None:
         self.client.delete_object(Bucket=self.bucket, Key=object_key)

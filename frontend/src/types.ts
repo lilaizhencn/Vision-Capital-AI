@@ -119,6 +119,24 @@ export interface EvidenceRequirement {
   updated_at: string;
 }
 
+export interface RequirementField {
+  key: string;
+  label: string;
+  status: "found" | "missing";
+  evidence_excerpt: string;
+  source_file_id?: string | null;
+  source_filename?: string | null;
+}
+
+export interface RequirementFile {
+  id: string;
+  filename: string;
+  content_type: string;
+  parse_status: string;
+  source_kind: string;
+  created_at: string;
+}
+
 export interface ResearchSource {
   id: string;
   project_id: string;
@@ -147,6 +165,13 @@ export interface ResearchWorkspace {
   last_error?: string | null;
 }
 
+export interface RequirementDetail {
+  requirement: EvidenceRequirement;
+  fields: RequirementField[];
+  related_files: RequirementFile[];
+  related_sources: ResearchSource[];
+}
+
 export interface Report {
   id: string;
   project_id: string;
@@ -171,8 +196,27 @@ export interface ProjectTask {
   project_id: string;
   label: string;
   done: boolean;
+  status: "todo" | "in_progress" | "completed";
+  description: string;
+  assignee: string;
+  due_date?: string | null;
+  result: string;
+  related_requirement_id?: string | null;
+  evidence_file_ids: string[];
+  completed_at?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface ProjectTaskInput {
+  label?: string;
+  status?: "todo" | "in_progress" | "completed";
+  description?: string;
+  assignee?: string;
+  due_date?: string | null;
+  result?: string;
+  related_requirement_id?: string | null;
+  evidence_file_ids?: string[];
 }
 
 export interface DashboardSummary {

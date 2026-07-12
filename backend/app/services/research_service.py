@@ -14,11 +14,12 @@ from urllib.parse import urlparse
 import httpx
 import fitz
 from ddgs import DDGS
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.file import ParseStage, ParseStatus, ProjectFile
+from app.models.chunk import DocumentChunk
 from app.models.project import Project
 from app.models.research import EvidenceRequirement, EvidenceStatus, ResearchSource, ResearchSourceStatus
 from app.repositories.project_repository import ProjectRepository
@@ -66,6 +67,58 @@ CATEGORY_RELEVANCE_TERMS = {
 
 INDUSTRY_STOP_WORDS = {"and", "the", "with", "industry", "sector", "company", "services"}
 
+REQUIREMENT_FIELDS = {
+    "business": (
+        ("products", "产品与服务清单", ("product", "service", "产品", "服务")),
+        ("revenue_model", "收入模式与定价", ("revenue model", "pricing", "subscription", "定价", "收入模式")),
+        ("unit_economics", "单位经济性", ("unit economics", "gross margin", "contribution margin", "单位经济", "毛利率")),
+        ("delivery", "交付与供应链", ("delivery", "supplier", "supply chain", "交付", "供应链")),
+    ),
+    "financial": (
+        ("income", "收入、利润与增长", ("revenue", "net income", "operating income", "收入", "净利润")),
+        ("cash_flow", "经营现金流与自由现金流", ("cash flow", "free cash flow", "经营现金流", "自由现金流")),
+        ("balance_sheet", "现金、债务与资产负债", ("balance sheet", "cash and cash equivalents", "debt", "资产负债", "债务")),
+        ("forecast", "预算、预测与实际差异", ("forecast", "guidance", "budget", "预测", "预算")),
+    ),
+    "market": (
+        ("definition", "细分市场定义", ("addressable market", "market definition", "细分市场", "目标市场")),
+        ("size", "市场规模与增速", ("market size", "tam", "cagr", "市场规模", "增速")),
+        ("drivers", "行业驱动因素", ("industry trend", "growth driver", "行业趋势", "驱动因素")),
+        ("regulation", "政策与监管环境", ("regulation", "policy", "监管", "政策")),
+    ),
+    "competition": (
+        ("competitors", "主要竞争对手", ("competitor", "competition", "竞争对手", "竞争")),
+        ("position", "市场份额与竞争位置", ("market share", "competitive position", "市场份额", "竞争地位")),
+        ("differentiation", "产品差异化与壁垒", ("differentiation", "competitive advantage", "差异化", "竞争优势")),
+        ("benchmark", "可比公司与指标口径", ("peer", "comparable", "benchmark", "可比公司", "对标")),
+    ),
+    "team": (
+        ("roster", "管理层名单与职务", ("chief executive", "management", "executive", "管理层", "高管")),
+        ("background", "核心成员履历与行业经验", ("served as", "previously served", "appointed", "joined the company", "履历", "曾任")),
+        ("board", "董事会构成与独立性", ("independent director", "board composition", "board independence", "独立董事", "董事会构成")),
+        ("incentives", "股权、薪酬与激励约束", ("executive compensation", "stock award", "long-term incentive", "compensation committee", "高管薪酬", "股权激励")),
+        ("succession", "关键人依赖与继任计划", ("succession", "key person", "继任", "关键人")),
+    ),
+    "legal": (
+        ("licenses", "资质许可与监管要求", ("license", "regulatory", "许可", "监管")),
+        ("litigation", "重大诉讼与争议", ("litigation", "legal proceeding", "诉讼", "争议")),
+        ("compliance", "合规体系与处罚记录", ("compliance", "penalty", "合规", "处罚")),
+        ("ip", "知识产权与权属", ("patent", "trademark", "intellectual property", "专利", "知识产权")),
+    ),
+    "customers": (
+        ("concentration", "客户集中度", ("customer concentration", "major customer", "客户集中", "主要客户")),
+        ("retention", "留存、续约与流失", ("retention", "renewal", "churn", "留存", "续约")),
+        ("contracts", "核心合同与剩余期限", ("customer contract", "contract term", "客户合同", "合同期限")),
+        ("references", "客户访谈与满意度", ("customer survey", "satisfaction", "客户访谈", "满意度")),
+    ),
+    "valuation": (
+        ("price", "当前价格与估值基准", ("market capitalization", "valuation", "估值", "市值")),
+        ("multiples", "可比公司与估值倍数", ("multiple", "price earnings", "enterprise value", "估值倍数", "市盈率")),
+        ("terms", "拟议交易条款", ("term sheet", "transaction terms", "交易条款", "投资协议")),
+        ("mandate", "投资授权与仓位约束", ("investment mandate", "position limit", "投资授权", "仓位")),
+    ),
+}
+
 
 class _TextExtractor(HTMLParser):
     def __init__(self) -> None:
@@ -106,6 +159,84 @@ class ResearchService:
             .order_by(EvidenceRequirement.priority, EvidenceRequirement.label)
         ))
         return cached or self.refresh_requirements(project_id)
+
+    def requirement_detail(self, project_id: str, requirement_id: str, owner_id: str) -> dict:
+        self._project(project_id, owner_id)
+        requirement = self.db.scalar(select(EvidenceRequirement).where(
+            EvidenceRequirement.id == requirement_id,
+            EvidenceRequirement.project_id == project_id,
+        ))
+        if not requirement:
+            raise ValueError("Evidence requirement not found")
+        definitions = REQUIREMENT_FIELDS.get(requirement.category, ())
+        all_keywords = tuple(dict.fromkeys(keyword for _key, _label, keywords in definitions for keyword in keywords))
+        chunks = list(self.db.scalars(
+            select(DocumentChunk)
+            .where(
+                DocumentChunk.project_id == project_id,
+                or_(*(DocumentChunk.content.ilike(f"%{keyword}%") for keyword in all_keywords)),
+            )
+            .order_by(DocumentChunk.chunk_index)
+            .limit(80)
+        )) if all_keywords else []
+        files = {item.id: item for item in self.db.scalars(
+            select(ProjectFile).where(ProjectFile.project_id == project_id)
+        )}
+        fields: list[dict] = []
+        used_file_ids: list[str] = []
+        for key, label, keywords in definitions:
+            ranked = sorted(
+                chunks,
+                key=lambda chunk: sum(keyword.lower() in chunk.content.lower() for keyword in keywords),
+                reverse=True,
+            )
+            match = next((
+                chunk for chunk in ranked
+                if any(keyword.lower() in chunk.content.lower() for keyword in keywords)
+                and self._is_substantive_evidence(chunk.content)
+            ), None)
+            source_file = files.get(match.file_id) if match else None
+            if source_file and source_file.id not in used_file_ids:
+                used_file_ids.append(source_file.id)
+            fields.append({
+                "key": key,
+                "label": label,
+                "status": "found" if match else "missing",
+                "evidence_excerpt": self._evidence_excerpt(match.content, keywords) if match else "",
+                "source_file_id": source_file.id if source_file else None,
+                "source_filename": source_file.filename if source_file else None,
+            })
+        related_files = [files[file_id] for file_id in used_file_ids]
+        related_sources = list(self.db.scalars(
+            select(ResearchSource)
+            .where(ResearchSource.project_id == project_id, ResearchSource.evidence_category == requirement.category)
+            .order_by(ResearchSource.discovered_at.desc())
+            .limit(20)
+        ))
+        return {
+            "requirement": requirement,
+            "fields": fields,
+            "related_files": related_files,
+            "related_sources": related_sources,
+        }
+
+    @staticmethod
+    def _evidence_excerpt(content: str, keywords: tuple[str, ...], radius: int = 260) -> str:
+        lowered = content.lower()
+        positions = [lowered.find(keyword.lower()) for keyword in keywords]
+        position = min((value for value in positions if value >= 0), default=0)
+        start = max(0, position - radius)
+        end = min(len(content), position + radius)
+        excerpt = re.sub(r"\s+", " ", content[start:end]).strip()
+        return ("..." if start else "") + excerpt + ("..." if end < len(content) else "")
+
+    @staticmethod
+    def _is_substantive_evidence(content: str) -> bool:
+        """Reject filing indexes that mention topics without disclosing underlying facts."""
+        lowered = content.lower()
+        if "table of contents" in lowered:
+            return False
+        return len(re.findall(r"\bitem\s+\d+[a-z]?\b", lowered)) < 3
 
     def refresh_requirements(self, project_id: str) -> list[EvidenceRequirement]:
         rows = list(self.db.execute(

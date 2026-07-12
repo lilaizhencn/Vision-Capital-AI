@@ -19,6 +19,24 @@ class EvidenceRequirementRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class RequirementFieldRead(BaseModel):
+    key: str
+    label: str
+    status: str
+    evidence_excerpt: str = ""
+    source_file_id: str | None = None
+    source_filename: str | None = None
+
+
+class RequirementFileRead(BaseModel):
+    id: str
+    filename: str
+    content_type: str
+    parse_status: str
+    source_kind: str
+    created_at: datetime
+
+
 class ResearchSourceRead(BaseModel):
     id: str
     project_id: str
@@ -47,6 +65,13 @@ class ResearchWorkspaceRead(BaseModel):
     last_research_at: datetime | None = None
     next_research_at: datetime | None = None
     last_error: str | None = None
+
+
+class RequirementDetailRead(BaseModel):
+    requirement: EvidenceRequirementRead
+    fields: list[RequirementFieldRead]
+    related_files: list[RequirementFileRead]
+    related_sources: list[ResearchSourceRead]
 
 
 class ResearchSettingsUpdate(BaseModel):

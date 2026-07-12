@@ -164,16 +164,26 @@ button, input, textarea { font: inherit; }
 .evidence-missing-list { margin: 8px 0 0; padding-left: 20px; }
 .evidence-missing-list li { margin: 5px 0; line-height: 1.55; }
 .evidence-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 20px; }
-.evidence-card { min-height: 150px; padding: 18px; border: 1px solid var(--line); background: #fbfbf7; }
+.evidence-card { min-height: 170px; padding: 18px; border: 1px solid var(--line); background: #fbfbf7; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease; }
+.evidence-card:hover { border-color: var(--copper); box-shadow: 0 10px 24px rgba(31, 65, 57, .08); transform: translateY(-2px); }
+.evidence-card:focus-visible { outline: 2px solid var(--teal); outline-offset: 3px; }
 .evidence-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
 .evidence-card p { margin: 14px 0 10px; color: #566b64; font-size: 13px; line-height: 1.65; }
 .evidence-card > span { color: var(--muted); font-size: 11px; }
+.evidence-card > b { display: flex; align-items: center; justify-content: space-between; margin-top: 16px; color: var(--teal); font-size: 12px; font-weight: 700; }
 .evidence-missing { border-left: 3px solid #b64d45; }
 .evidence-partial { border-left: 3px solid #bd7b3d; }
 .evidence-covered { border-left: 3px solid var(--teal); }
 .task-complete { color: var(--teal); font-size: 20px; }
 .task-number { display: grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: #f0dfcd; color: var(--copper); font-size: 11px; }
 .task-done { color: var(--muted); text-decoration: line-through; }
+.requirement-summary { margin: -12px 0 24px; padding: 18px; border-left: 3px solid var(--copper); background: #f7f3ea; }
+.requirement-summary p { margin: 12px 0 8px; color: var(--ink); line-height: 1.7; }
+.requirement-summary small { color: var(--muted); line-height: 1.6; }
+.requirement-field-list { margin-bottom: 24px; border-top: 1px solid var(--line); }
+.requirement-field-list .ant-list-item { align-items: flex-start; }
+.requirement-field-list p { margin: 4px 0 8px; color: #526760; line-height: 1.7; }
+.requirement-field-list span { color: var(--muted); font-size: 11px; }
 .monitoring-placeholder { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 48px 12px 24px; color: var(--muted); text-align: center; }
 .monitoring-placeholder .anticon { color: var(--teal); font-size: 32px; }
 .floating-assistant { position: fixed; right: 28px; bottom: 26px; z-index: 20; border: 0; border-radius: 4px; background: var(--forest); box-shadow: 0 12px 30px rgba(12, 48, 43, .2); }

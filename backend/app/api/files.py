@@ -1,4 +1,8 @@
+from urllib.parse import quote
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from starlette.background import BackgroundTask
+from starlette.responses import StreamingResponse
 from math import ceil
 from sqlalchemy.orm import Session
 
@@ -11,6 +15,7 @@ from app.repositories.file_repository import FileRepository
 from app.repositories.project_repository import ProjectRepository
 from app.schemas.file import BatchCreateRequest, BatchRead, FileRead, FileUploadResponse, MultipartCompleteRequest, MultipartPart
 from app.services.file_service import FileService
+from app.storage.storage_service import get_storage_service
 
 router = APIRouter(tags=["files"])
 
@@ -152,6 +157,32 @@ def get_file(file_id: str, db: Session = Depends(get_db), user: User = Depends(g
     if not project:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
     return file
+
+
+@router.get("/api/files/{file_id}/download")
+def download_file(file_id: str, db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    file = FileRepository(db).get(file_id)
+    if not file or not ProjectRepository(db).get_for_owner(file.project_id, user.id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    try:
+        stream = get_storage_service().open_download(file.r2_object_key)
+    except (FileNotFoundError, OSError):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Stored object not found")
+
+    def chunks():
+        while True:
+            chunk = stream.read(1024 * 1024)
+            if not chunk:
+                break
+            yield chunk
+
+    disposition = f"attachment; filename*=UTF-8''{quote(file.filename)}"
+    return StreamingResponse(
+        chunks(),
+        media_type=file.content_type or "application/octet-stream",
+        headers={"Content-Disposition": disposition, "Content-Length": str(file.size)},
+        background=BackgroundTask(stream.close),
+    )
 
 
 @router.delete("/api/files/{file_id}")

@@ -1,12 +1,12 @@
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.deps import get_current_user
 from app.models.user import User
-from app.schemas.research import EnrichmentResponse, ResearchSettingsUpdate, ResearchWorkspaceRead
+from app.schemas.research import EnrichmentResponse, RequirementDetailRead, ResearchSettingsUpdate, ResearchWorkspaceRead
 from app.services.research_service import ResearchService
 from app.workers.tasks import enrich_project_research_task
 
@@ -28,6 +28,19 @@ def get_research_workspace(project_id: str, db: Session = Depends(get_db), user:
         next_research_at=project.next_research_at,
         last_error=project.research_last_error,
     )
+
+
+@router.get("/requirements/{requirement_id}", response_model=RequirementDetailRead)
+def get_requirement_detail(
+    project_id: str,
+    requirement_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    try:
+        return ResearchService(db).requirement_detail(project_id, requirement_id, user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
 
 
 @router.post("/enrich", response_model=EnrichmentResponse, status_code=202)
