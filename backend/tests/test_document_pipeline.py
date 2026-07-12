@@ -2,6 +2,7 @@ from io import BytesIO
 import hashlib
 import socket
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 
 import pandas as pd
 import pytest
@@ -1174,8 +1175,14 @@ def test_financial_lifecycle_enforces_closing_gates_and_versions_opinions(api_cl
     summary = api_client.get(f"/api/projects/{project_id}/lifecycle", headers=headers)
     assert summary.status_code == 200
     assert summary.json()["risks"][0]["severity"] == "high"
-    assert summary.json()["opinions"][0]["recommendation"] == "escalate"
-    version = summary.json()["opinions"][0]["version"]
+    opinion = summary.json()["opinions"][0]
+    assert opinion["recommendation"] == "escalate"
+    assert opinion["evidence_file_ids"] == [file_id]
+    assert Decimal(opinion["quality_score"]) < Decimal("80")
+    for section in ("投后监控：", "已核验事实：", "分析师推断：", "核验动作：", "投委门槛：", "无法判断："):
+        assert section in opinion["thesis"]
+    assert "单期恢复不能自动证明风险已经消除" in opinion["thesis"]
+    version = opinion["version"]
     refreshed = api_client.post(f"/api/projects/{project_id}/lifecycle/opinions/refresh", headers=headers)
     assert refreshed.json()["version"] == version
 
@@ -1238,7 +1245,45 @@ def test_fixed_professional_evaluation_suite_passes_and_rejects_unsafe_opinion()
 
     report = run_suite()
     assert report["passed"] is True
+    assert report["case_count"] == 22
+    assert report["stage_distribution"] == {"pre_investment": 10, "in_progress": 4, "post_investment": 8}
+    assert len(report["scenario_distribution"]) >= 15
+    assert report["expectation_failures"] == []
     assert report["minimum_passing_score"] >= 80
     unsafe = next(item for item in report["results"] if item["case_id"] == "reject_invented_buy_call")
     assert unsafe["passed"] is False
     assert any("unsupported numeric" in item for item in unsafe["critical_issues"])
+    conflict = next(item for item in report["results"] if item["case_id"] == "reject_ignored_conflict")
+    assert any("conflict not disclosed" in item for item in conflict["critical_issues"])
+    deescalation = next(item for item in report["results"] if item["case_id"] == "reject_unverified_risk_deescalation")
+    assert any("de-escalated" in item for item in deescalation["critical_issues"])
+
+
+def test_opinion_evidence_admission_excludes_unrelated_public_research() -> None:
+    from app.models.research import ResearchSourceStatus
+    from app.services.lifecycle_service import LifecycleService
+
+    project = SimpleNamespace(company_name="Lifecycle Holdings QA", industry="Enterprise software")
+    source = SimpleNamespace(status=ResearchSourceStatus.ingested, evidence_category="financial")
+    market_source = SimpleNamespace(status=ResearchSourceStatus.ingested, evidence_category="market")
+    manual_file = SimpleNamespace(source_kind="upload", parsed_text="Signed closing evidence")
+    unrelated_public = SimpleNamespace(
+        source_kind="public_research",
+        parsed_text="A development program supporting women entrepreneurs in Kenya and Ethiopia.",
+    )
+    relevant_public = SimpleNamespace(
+        source_kind="public_research",
+        parsed_text=(
+            "Lifecycle Holdings QA reported revenue and cash flow. "
+            "Lifecycle Holdings QA reconciled revenue against audited statements."
+        ),
+    )
+
+    assert LifecycleService._opinion_file_is_admissible(project, manual_file, None) is True
+    assert LifecycleService._opinion_file_is_admissible(project, unrelated_public, source) is False
+    assert LifecycleService._opinion_file_is_admissible(
+        project,
+        SimpleNamespace(source_kind="public_research", parsed_text="Enterprise software and AI adoption trends."),
+        market_source,
+    ) is False
+    assert LifecycleService._opinion_file_is_admissible(project, relevant_public, source) is True

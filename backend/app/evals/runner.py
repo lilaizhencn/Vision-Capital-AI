@@ -11,7 +11,12 @@ def run_suite() -> dict:
     cases = json.loads(cases_path.read_text(encoding="utf-8"))
     results = []
     expectation_failures = []
+    stage_distribution: dict[str, int] = {}
+    scenario_distribution: dict[str, int] = {}
     for case in cases:
+        stage_distribution[case["stage"]] = stage_distribution.get(case["stage"], 0) + 1
+        scenario = case.get("scenario", "general")
+        scenario_distribution[scenario] = scenario_distribution.get(scenario, 0) + 1
         result = ProfessionalInvestmentEvaluator.evaluate(
             case_id=case["id"], stage=case["stage"], answer=case["answer"], evidence=case["evidence"]
         )
@@ -19,10 +24,18 @@ def run_suite() -> dict:
         results.append(row)
         if result.passed != case["expect_pass"]:
             expectation_failures.append(case["id"])
+        for expected in case.get("expected_critical_contains", []):
+            if not any(expected in issue for issue in result.critical_issues):
+                expectation_failures.append(f"{case['id']}:missing-critical:{expected}")
+        for expected in case.get("expected_quality_contains", []):
+            if not any(expected in issue for issue in result.quality_issues):
+                expectation_failures.append(f"{case['id']}:missing-quality:{expected}")
     passing_scores = [item["score"] for item in results if item["expected_pass"]]
     return {
-        "suite": "institutional-investment-quality-v1",
+        "suite": "institutional-investment-quality-v2",
         "case_count": len(results),
+        "stage_distribution": stage_distribution,
+        "scenario_distribution": scenario_distribution,
         "minimum_passing_score": min(passing_scores) if passing_scores else 0,
         "expectation_failures": expectation_failures,
         "passed": not expectation_failures,

@@ -106,6 +106,7 @@ class LifecycleService:
             self.db.rollback()
             raise HTTPException(status_code=409, detail="Metric code already exists for this project") from exc
         self.db.refresh(item)
+        self.refresh_opinion(project_id, owner_id)
         return item
 
     def create_observation(
@@ -266,27 +267,58 @@ class LifecycleService:
 
     def refresh_opinion(self, project_id: str, owner_id: str) -> InvestmentOpinionVersion:
         project = self.project(project_id, owner_id)
-        files = list(self.db.scalars(select(ProjectFile).where(
+        all_files = list(self.db.scalars(select(ProjectFile).where(
             ProjectFile.project_id == project_id, ProjectFile.parse_status == ParseStatus.completed
         ).order_by(ProjectFile.created_at)))
+        public_file_ids = [item.id for item in all_files if item.source_kind == "public_research"]
+        research_sources = {
+            item.file_id: item for item in self.db.scalars(select(ResearchSource).where(
+                ResearchSource.project_id == project_id, ResearchSource.file_id.in_(public_file_ids)
+            ))
+        } if public_file_ids else {}
+        files = [
+            item for item in all_files
+            if self._opinion_file_is_admissible(project, item, research_sources.get(item.id))
+        ]
+        admitted_file_ids = {item.id for item in files}
+        excluded_public_count = len(all_files) - len(files)
         requirements = list(self.db.scalars(select(EvidenceRequirement).where(EvidenceRequirement.project_id == project_id)))
         transaction = self.db.scalar(select(TransactionExecution).where(TransactionExecution.project_id == project_id))
         observations = list(self.db.scalars(select(MonitoringObservation).where(
             MonitoringObservation.project_id == project_id
         ).order_by(MonitoringObservation.period_end.desc()).limit(100)))
+        metrics = list(self.db.scalars(select(MonitoringMetric).where(
+            MonitoringMetric.project_id == project_id, MonitoringMetric.active.is_(True)
+        )))
         risks = list(self.db.scalars(select(RiskEvent).where(
             RiskEvent.project_id == project_id, RiskEvent.status != "resolved"
         )))
         evidence_payload = {
             "files": [(item.id, item.checksum_sha256, item.created_at.isoformat()) for item in files],
+            "excluded_public_files": [item.id for item in all_files if item.id not in admitted_file_ids],
             "requirements": [(item.category, item.status.value) for item in requirements],
             "transaction": None if not transaction else {
+                "type": transaction.transaction_type,
                 "status": transaction.status,
                 "approval": transaction.approval_status,
+                "amount": str(transaction.committed_amount),
+                "valuation": str(transaction.entry_valuation),
+                "ownership": str(transaction.ownership_pct),
+                "rationale": transaction.decision_rationale,
                 "conditions": transaction.conditions_precedent,
+                "evidence": transaction.evidence_file_ids,
             },
-            "observations": [(item.metric_id, item.period_end.isoformat(), str(item.value), item.status) for item in observations],
-            "risks": [(item.id, item.severity, item.status) for item in risks],
+            "metrics": [(
+                item.id, item.code, item.frequency, item.direction, str(item.target_value),
+                str(item.watch_threshold), str(item.breach_threshold), item.source_description,
+            ) for item in metrics],
+            "observations": [(
+                item.metric_id, item.period_end.isoformat(), str(item.value), item.status,
+                item.source_file_id, item.note,
+            ) for item in observations],
+            "risks": [(
+                item.id, item.severity, item.status, item.description, item.trigger_source, item.evidence_file_ids,
+            ) for item in risks],
         }
         evidence_hash = hashlib.sha256(json.dumps(evidence_payload, sort_keys=True, ensure_ascii=True).encode()).hexdigest()
         latest = self.db.scalar(select(InvestmentOpinionVersion).where(
@@ -299,25 +331,84 @@ class LifecycleService:
         high_risks = sum(item.severity in {"high", "critical"} for item in risks)
         watch_risks = sum(item.severity == "watch" for item in risks)
         source_count = len(files)
-        quality = min(100, round(coverage * 55 + min(source_count, 10) * 3 + min(len(observations), 15) * 1, 2))
+        integrity_ratio = sum(bool(item.checksum_sha256) for item in files) / max(source_count, 1)
+        source_diversity = min(len({item.source_kind for item in files}) / 2, 1)
+        trusted_ratio = sum(item.source_quality in {"official", "high", "verified"} for item in files) / max(source_count, 1)
+        evidence_score = coverage * 50 + integrity_ratio * 15 + source_diversity * 10 + trusted_ratio * 10
         if project.investment_status == InvestmentStatus.in_progress:
+            conditions = transaction.conditions_precedent if transaction else []
+            unresolved_conditions = [
+                item.get("label", "未命名条件") for item in conditions
+                if item.get("status") not in {"satisfied", "waived"}
+            ]
             gates_ready = bool(transaction and transaction.approval_status == "approved" and all(
                 condition.get("status") in {"satisfied", "waived"}
-                for condition in transaction.conditions_precedent
+                for condition in conditions
             ))
             recommendation = "hold_execution" if high_risks or not gates_ready else "proceed_with_controls"
+            stage_score = 0
+            if transaction:
+                stage_score += 5
+                stage_score += 5 if transaction.evidence_file_ids else 0
+                stage_score += 5 if gates_ready else 0
         elif project.investment_status == InvestmentStatus.post_investment:
             recommendation = "escalate" if high_risks else "enhanced_monitoring" if watch_risks else "monitor"
+            stage_score = min(len(metrics), 2) * 4 + (4 if observations else 0) + (
+                3 if observations and all(item.source_file_id for item in observations[:3]) else 0
+            )
         else:
             recommendation = "proceed_to_diligence" if coverage >= 0.75 and source_count >= 2 else "insufficient_evidence"
+            stage_score = min(source_count, 3) * 5
+        quality = min(100, round(evidence_score + stage_score, 2))
         confidence = "high" if quality >= 80 else "medium" if quality >= 55 else "low"
-        thesis = (
-            f"截至本版本，已核验 {source_count} 份资料，{covered}/{len(requirements)} 个研究维度达到覆盖标准；"
-            f"记录 {len(observations)} 个周期观测，存在 {high_risks} 个高风险和 {watch_risks} 个关注事件。"
-            "本结论是证据门禁下的决策基线，不构成脱离投委授权、估值模型和原始凭证的交易建议。"
-        )
+        evidence_markers = "".join(f"[E{index}]" for index, _ in enumerate(files[:5], start=1))
+        fact_citation = evidence_markers or "（当前无可引用资料）"
+        missing_requirements = [item.label for item in requirements if item.status != EvidenceStatus.covered]
+        missing_text = "、".join(missing_requirements[:3]) or "无重大资料缺口"
+        if project.investment_status == InvestmentStatus.in_progress:
+            conclusion = "暂停交易执行" if recommendation == "hold_execution" else "仅在控制条件持续满足时推进交割"
+            inference = (
+                f"当前有 {len(unresolved_conditions)} 项未完成交割条件"
+                if unresolved_conditions else "当前台账未发现未完成交割条件，但仍需在付款前复核证据有效性"
+            )
+            verification = "逐项复核投委批准、签署文件、收款账户、前置条件证据及正式豁免授权"
+            gate = "投委批准有效、全部前置条件满足或正式豁免、签署与付款证据归档后方可交割"
+            unknown = "实际资金路径、最终受益账户和未归档条件的法律效力"
+            stage_heading = "投中执行"
+        elif project.investment_status == InvestmentStatus.post_investment:
+            conclusion = {
+                "escalate": "升级投委处理并暂停依赖乐观假设的后续动作",
+                "enhanced_monitoring": "维持增强监控",
+                "monitor": "在既定阈值下持续监控",
+            }[recommendation]
+            risk_names = "、".join(item.title for item in risks[:3]) or "未发现开放风险事件"
+            inference = f"当前风险信号为：{risk_names}；单期恢复不能自动证明风险已经消除"
+            verification = "按指标口径复核原始凭证、连续周期趋势、预算偏差和风险整改证据"
+            gate = "高风险或关键 KPI 越界提交投委；仅在连续周期达标且整改证据核验后降级"
+            unknown = "缺失周期的经营表现、现金预测兑现率及未核验风险的最终影响"
+            stage_heading = "投后监控"
+        else:
+            conclusion = "仅在资料条件满足后进入下一轮尽调" if recommendation == "proceed_to_diligence" else "证据不足，暂不形成投资判断"
+            inference = f"当前主要证据缺口为：{missing_text}；覆盖度不足时不能外推估值或投资回报"
+            verification = "补齐关键资料并对财务、客户、法律、市场与估值口径执行独立交叉核验"
+            gate = "关键研究维度达到覆盖标准、重大矛盾完成调节、估值与下行情景经投委复核后再决策"
+            unknown = "合理估值、增长可持续性、退出路径与风险调整后回报"
+            stage_heading = "投前结论"
+        thesis = "\n".join((
+            f"{stage_heading}：{conclusion}（有条件）。",
+            f"已核验事实：{source_count} 份资料通过意见证据准入 {fact_citation}；剔除 {excluded_public_count} 份关联性不足的公开资料；{covered}/{len(requirements)} 个研究维度达到覆盖标准；记录 {len(observations)} 个周期观测；存在 {high_risks} 个高风险和 {watch_risks} 个关注事件。",
+            f"分析师推断：{inference}。",
+            f"核验动作：{verification}；优先补充 {missing_text}。",
+            f"投委门槛：{gate}。",
+            f"无法判断：基于当前证据仍无法判断{unknown}。",
+        ))
         previous = latest.recommendation if latest else "无历史版本"
-        change_summary = f"证据集发生变化；建议由“{previous}”更新为“{recommendation}”。"
+        file_delta = source_count - (latest.source_count if latest else 0)
+        recommendation_change = (
+            f"建议由“{previous}”更新为“{recommendation}”"
+            if previous != recommendation else f"建议维持“{recommendation}”"
+        )
+        change_summary = f"证据集发生变化（资料净增加 {file_delta} 份）；{recommendation_change}。"
         opinion = InvestmentOpinionVersion(
             project_id=project_id,
             version=(latest.version + 1 if latest else 1),
@@ -343,6 +434,22 @@ class LifecycleService:
         )))) if unique_ids else 0
         if count != len(unique_ids):
             raise HTTPException(status_code=400, detail="Every evidence file must belong to this project")
+
+    @staticmethod
+    def _opinion_file_is_admissible(
+        project: Project, file: ProjectFile, source: ResearchSource | None
+    ) -> bool:
+        if file.source_kind != "public_research":
+            return True
+        if not source or source.status != ResearchSourceStatus.ingested or not file.parsed_text:
+            return False
+        from app.services.research_service import ResearchService
+        if source.evidence_category == "market":
+            normalized = ResearchService._normalize_relevance_text(file.parsed_text)
+            aliases = ResearchService._company_aliases(project.company_name)
+            if max((normalized.count(alias) for alias in aliases), default=0) < 2:
+                return False
+        return ResearchService._content_is_relevant(project, source.evidence_category, file.parsed_text)
 
     @staticmethod
     def _metric_status(metric: MonitoringMetric, value: Decimal) -> str:

@@ -34,6 +34,23 @@ const recommendationLabel: Record<string, string> = {
   monitor: "持续监控",
 };
 
+const opinionSectionClass: Record<string, string> = {
+  "已核验事实": "facts",
+  "分析师推断": "inference",
+  "核验动作": "action",
+  "投委门槛": "gate",
+  "无法判断": "boundary",
+};
+
+function opinionSections(thesis: string) {
+  return thesis.split("\n").map((line) => {
+    const separator = line.indexOf("：");
+    return separator > 0
+      ? { label: line.slice(0, separator), content: line.slice(separator + 1) }
+      : { label: "投资意见", content: line };
+  });
+}
+
 function formatNumber(value?: string | null) {
   if (value === null || value === undefined || value === "") return "未设";
   const parsed = Number(value);
@@ -44,6 +61,7 @@ export default function LifecycleProfessionalPanel({ projectId, files, mode, onP
   const [summary, setSummary] = useState<LifecycleSummary>(EMPTY_SUMMARY);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [metricOpen, setMetricOpen] = useState(false);
   const [observationMetric, setObservationMetric] = useState<MonitoringMetricDefinition | null>(null);
   const [sourceOpen, setSourceOpen] = useState(false);
@@ -62,7 +80,7 @@ export default function LifecycleProfessionalPanel({ projectId, files, mode, onP
     }
   };
 
-  useEffect(() => { void load(); }, [projectId]);
+  useEffect(() => { void load(); }, [projectId, mode]);
 
   const saveTransaction = async (values: any) => {
     setSaving(true);
@@ -125,13 +143,23 @@ export default function LifecycleProfessionalPanel({ projectId, files, mode, onP
   };
 
   const latestOpinion = summary.opinions[0];
+  const latestSections = latestOpinion ? opinionSections(latestOpinion.thesis) : [];
+  const decisionSection = latestSections[0];
+  const evidenceNames = latestOpinion?.evidence_file_ids.map((fileId, index) => `E${index + 1} · ${files.find((file) => file.id === fileId)?.filename ?? `证据 ${fileId.slice(0, 8)}`}`) ?? [];
   const opinionPanel = (
-    <Card className="workspace-panel lifecycle-opinion" loading={loading} title="当前投资意见基线" extra={<Button icon={<ReloadOutlined />} onClick={async () => { await refreshInvestmentOpinion(projectId); await load(); }}>基于最新证据重算</Button>}>
+    <Card className="workspace-panel lifecycle-opinion" loading={loading} title="当前投资意见基线" extra={<Button icon={<ReloadOutlined />} loading={refreshing} onClick={async () => { setRefreshing(true); try { await refreshInvestmentOpinion(projectId); await load(); message.success("已基于最新证据完成复核"); } catch (error: any) { message.error(errorText(error, "投资意见复核失败")); } finally { setRefreshing(false); } }}>基于最新证据复核</Button>}>
       {latestOpinion ? <>
-        <Row gutter={[16, 16]}>
-          <Col xs={24} md={8}><div className="opinion-score"><Progress type="dashboard" percent={Number(latestOpinion.quality_score)} size={92} /><span>证据质量</span></div></Col>
-          <Col xs={24} md={16}><Space wrap><Tag color={latestOpinion.recommendation === "escalate" || latestOpinion.recommendation === "hold_execution" ? "red" : "blue"}>{recommendationLabel[latestOpinion.recommendation] ?? latestOpinion.recommendation}</Tag><Tag>V{latestOpinion.version}</Tag><Tag color={latestOpinion.confidence === "high" ? "green" : latestOpinion.confidence === "medium" ? "gold" : "red"}>置信度 {latestOpinion.confidence}</Tag></Space><Typography.Paragraph>{latestOpinion.thesis}</Typography.Paragraph><Typography.Text type="secondary">{latestOpinion.change_summary} · {latestOpinion.source_count} 份证据</Typography.Text></Col>
+        <Alert className="opinion-reliability-note" type={Number(latestOpinion.quality_score) < 55 ? "warning" : "info"} showIcon title="可靠性说明" description="证据可靠度衡量资料覆盖、完整性、来源质量和阶段控制，不代表项目成功率或投资收益概率。最终决策必须经过原始凭证复核和投委授权。" />
+        <Row gutter={[20, 20]} align="middle">
+          <Col xs={24} md={6}><div className="opinion-score"><Progress type="dashboard" percent={Number(latestOpinion.quality_score)} size={100} strokeColor={Number(latestOpinion.quality_score) < 55 ? "#b85e54" : "#2b776b"} /><span>证据可靠度</span><small>{latestOpinion.confidence === "high" ? "证据基础较完整" : latestOpinion.confidence === "medium" ? "仍有关键缺口" : "仅供问题识别"}</small></div></Col>
+          <Col xs={24} md={18}>
+            <Space wrap><Tag color={latestOpinion.recommendation === "escalate" || latestOpinion.recommendation === "hold_execution" ? "red" : "blue"}>{recommendationLabel[latestOpinion.recommendation] ?? latestOpinion.recommendation}</Tag><Tag>V{latestOpinion.version}</Tag><Tag color={latestOpinion.confidence === "high" ? "green" : latestOpinion.confidence === "medium" ? "gold" : "red"}>证据置信度 {latestOpinion.confidence}</Tag></Space>
+            <div className="opinion-decision"><span>阶段化结论</span><strong>{decisionSection?.content ?? latestOpinion.thesis}</strong></div>
+            <Typography.Text type="secondary">{latestOpinion.change_summary}</Typography.Text>
+          </Col>
         </Row>
+        <div className="opinion-brief-grid">{latestSections.slice(1).map((section) => <div key={section.label} className={`opinion-brief-item opinion-${opinionSectionClass[section.label] ?? "general"}`}><span>{section.label}</span><p>{section.content}</p></div>)}</div>
+        <div className="opinion-evidence"><span>本版证据 · {latestOpinion.source_count} 份</span><Space wrap>{evidenceNames.length ? evidenceNames.slice(0, 8).map((name) => <Tag key={name}>{name}</Tag>) : <Tag color="gold">暂无可引用证据</Tag>}{evidenceNames.length > 8 ? <Tag>另 {evidenceNames.length - 8} 份</Tag> : null}</Space></div>
       </> : <Alert type="info" showIcon title="尚未形成版本化意见" description="录入交易条件、投后指标或资料后，系统会生成第一版可追溯意见基线。" />}
     </Card>
   );
@@ -175,7 +203,7 @@ export default function LifecycleProfessionalPanel({ projectId, files, mode, onP
         <List dataSource={summary.risks} locale={{ emptyText: "当前没有风险事件" }} renderItem={(risk) => <List.Item actions={risk.status !== "resolved" ? [<Button key="resolve" type="link" onClick={async () => { await updateLifecycleRisk(projectId, risk.id, { status: "resolved" }); await load(); }}>标记已解决</Button>] : []}><List.Item.Meta title={<Space wrap><Tag color={risk.severity === "critical" || risk.severity === "high" ? "red" : "gold"}>{risk.severity}</Tag><span>{risk.title}</span><Tag>{risk.status}</Tag></Space>} description={`${risk.description} · ${risk.trigger_source}`} /></List.Item>} />
       </Card>
       {sourcePanel}
-      <Card className="workspace-panel" title="意见版本历史"><Collapse ghost items={summary.opinions.map((opinion) => ({ key: opinion.id, label: `V${opinion.version} · ${recommendationLabel[opinion.recommendation] ?? opinion.recommendation} · ${new Date(opinion.created_at).toLocaleString("zh-CN")}`, children: <><Typography.Paragraph>{opinion.thesis}</Typography.Paragraph><Typography.Text type="secondary">{opinion.change_summary}<br />证据哈希：{opinion.evidence_hash.slice(0, 16)}…</Typography.Text></> }))} /></Card>
+      <Card className="workspace-panel" title="意见版本历史"><Collapse ghost items={summary.opinions.map((opinion) => ({ key: opinion.id, label: `V${opinion.version} · ${recommendationLabel[opinion.recommendation] ?? opinion.recommendation} · 可靠度 ${formatNumber(opinion.quality_score)} · ${new Date(opinion.created_at).toLocaleString("zh-CN")}`, children: <><Typography.Paragraph className="opinion-history-thesis">{opinion.thesis}</Typography.Paragraph><Typography.Text type="secondary">{opinion.change_summary}<br />证据哈希：{opinion.evidence_hash.slice(0, 16)}…</Typography.Text></> }))} /></Card>
     </div>
   );
 

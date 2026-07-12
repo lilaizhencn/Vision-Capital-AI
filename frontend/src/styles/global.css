@@ -312,7 +312,20 @@ button, input, textarea { font: inherit; }
 @media (max-width: 760px) { .auth-page { padding: 22px 18px; place-items: start center; } .auth-shell { grid-template-columns: 1fr; gap: 34px; } .auth-story { min-height: 0; padding: 8px 0 0; } .auth-story-copy { padding-top: 58px; margin: 0; } .auth-story-copy h1.ant-typography { font-size: 42px; } .auth-proof { display: none; } .auth-register-note { margin-top: 28px; } .auth-card { padding: 28px 24px 24px; } .auth-heading { margin-top: 38px; } .auth-orbit-one { width: 500px; left: -280px; bottom: 45%; } .auth-grid { mask-image: linear-gradient(90deg, #000, transparent 95%); } }
 
 .lifecycle-opinion { overflow: hidden; background: linear-gradient(135deg, #f7fbf8 0%, #fffaf2 100%); }
+.opinion-reliability-note { margin-bottom: 20px; background: rgba(255,255,255,.72); }
 .opinion-score { display: grid; justify-items: center; gap: 4px; color: #59706a; font-size: 12px; }
+.opinion-score small { color: #8b9994; }
+.opinion-decision { display: grid; gap: 5px; margin: 14px 0 10px; }
+.opinion-decision span, .opinion-brief-item > span, .opinion-evidence > span { color: #7c8b86; font-size: 10px; font-weight: 700; letter-spacing: .1em; }
+.opinion-decision strong { color: var(--forest); font: 600 20px/1.45 var(--serif); }
+.opinion-brief-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 20px; }
+.opinion-brief-item { min-height: 112px; padding: 15px 16px; border: 1px solid #dfe8e2; border-left: 3px solid #7fa69a; background: rgba(255,255,255,.68); }
+.opinion-brief-item p { margin: 7px 0 0; color: #41544f; font-size: 12px; line-height: 1.75; }
+.opinion-action { border-left-color: #3c8475; }
+.opinion-gate { border-left-color: var(--copper); }
+.opinion-boundary { border-left-color: #b85e54; background: rgba(255,247,244,.82); }
+.opinion-evidence { display: grid; gap: 9px; margin-top: 14px; padding-top: 14px; border-top: 1px solid #dfe8e2; }
+.opinion-history-thesis { white-space: pre-line; line-height: 1.85; }
 .lifecycle-inline-alert { margin-bottom: 20px; }
 .lifecycle-submit { margin-top: 22px; min-width: 180px; }
 .field-full { width: 100%; }
@@ -320,4 +333,4 @@ button, input, textarea { font: inherit; }
 .risk-orb { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; background: #e9f4ee; color: #25735e; }
 .risk-orb.risk-watch { background: #fff3d4; color: #a66312; }
 .risk-orb.risk-high { background: #fde6e2; color: #b42318; }
-@media (max-width: 760px) { .lifecycle-submit { width: 100%; } .lifecycle-opinion .ant-card-extra { max-width: 48%; } }
+@media (max-width: 760px) { .lifecycle-submit { width: 100%; } .lifecycle-opinion .ant-card-head-wrapper { align-items: flex-start; flex-direction: column; gap: 8px; padding-block: 12px; } .lifecycle-opinion .ant-card-extra { max-width: none; margin-inline-start: 0; } .opinion-brief-grid { grid-template-columns: 1fr; } .opinion-decision strong { font-size: 18px; } }

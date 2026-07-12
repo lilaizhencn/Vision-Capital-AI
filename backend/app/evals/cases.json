@@ -2,29 +2,187 @@
   {
     "id": "pre_grounded_conditional",
     "stage": "pre_investment",
+    "scenario": "financial_baseline",
     "expect_pass": true,
     "evidence": "[E1] Audited revenue was CNY 120 million in 2025. [E2] Operating cash flow was CNY 18 million in 2025.",
     "answer": "投前结论：仅建议在条件满足后进入下一轮尽调。公司披露事实：2025 年收入为 CNY 120 million，经营现金流为 CNY 18 million [E1][E2]。分析师推断：现有数据只建立历史基线，不能证明增长持续。核验动作：将审计报表与银行流水逐项勾稽。投委门槛：估值模型、客户集中度和法律文件经复核后再决策。无法判断：当前无法判断合理估值与最终投资回报。"
   },
   {
+    "id": "pre_conflicting_revenue_sources",
+    "stage": "pre_investment",
+    "scenario": "evidence_conflict",
+    "expect_pass": true,
+    "evidence": "[CONFLICT] [E1] Audited statements report 2025 revenue of CNY 96 million. [E2] Management materials report 2025 revenue of CNY 110 million. [E3] Bank receipts total CNY 91 million.",
+    "answer": "投前结论：在条件满足前维持证据不足。公司披露事实：审计收入为 CNY 96 million [E1]，管理层口径为 CNY 110 million [E2]，银行回款为 CNY 91 million [E3]。分析师推断：三项口径存在冲突，可能涉及收入确认或含税口径不一致。核验动作：取得收入明细、合同、发票及回款执行穿行测试。投委门槛：矛盾完成调节并由财务顾问复核后方可进入估值。无法判断：冲突消除前无法判断真实收入质量。"
+  },
+  {
+    "id": "pre_forecast_with_scenarios",
+    "stage": "pre_investment",
+    "scenario": "forecast_governance",
+    "expect_pass": true,
+    "evidence": "[E1] Signed backlog is CNY 60 million. [E2] Historical gross margin was 42%. [E3] Customer churn was 8% in 2025.",
+    "answer": "投前结论：建议在条件满足后进入情景化估值。公司披露事实：已签订单为 CNY 60 million [E1]，历史毛利率为 42% [E2]，客户流失率为 8% [E3]。分析师推断：预测必须以订单转化率、毛利率和流失率假设为基础，并设置基准、上行和下行情景及敏感性分析。核验动作：抽查订单履约、续约和取消条款。投委门槛：下行情景仍满足回报底线后再决策。无法判断：当前无法判断未来收入兑现率。"
+  },
+  {
+    "id": "pre_low_quality_single_source",
+    "stage": "pre_investment",
+    "scenario": "source_quality",
+    "expect_pass": true,
+    "evidence": "[LOW_QUALITY] [E1] An unaudited management deck claims a 28% market share.",
+    "answer": "投前结论：证据不足，仅在条件满足后继续核验。公司披露事实：未经审计的管理层材料声称市场份额为 28% [E1]。分析师推断：单一低质量来源不能支持竞争优势判断。核验动作：通过行业数据库、客户访谈和第三方核验进行交叉验证。投委门槛：取得至少一个独立来源后再评价市场地位。无法判断：当前无法判断真实市场份额。"
+  },
+  {
+    "id": "pre_stale_market_data_disclosed",
+    "stage": "pre_investment",
+    "scenario": "evidence_recency",
+    "expect_pass": true,
+    "evidence": "[STALE] [E1] The latest market report is dated 2022 and estimates a CNY 4 billion market. [E2] The company entered two new regions in 2025.",
+    "answer": "投前结论：仅在条件满足后更新市场判断。公司披露事实：现有市场报告为 2022 年、市场规模 CNY 4 billion [E1]，公司于 2025 年进入两个新区域 [E2]。分析师推断：市场资料已经过期，无法直接映射当前区域扩张。核验动作：更新行业规模、价格与竞争格局并核对区域收入。投委门槛：完成时效更新后重跑市场空间情景。无法判断：当前无法判断最新可服务市场。"
+  },
+  {
     "id": "during_closing_controls",
     "stage": "in_progress",
+    "scenario": "closing_conditions",
     "expect_pass": true,
     "evidence": "[E1] The IC approved a CNY 50 million commitment. [E2] Legal counsel listed license renewal as a closing condition.",
-    "answer": "投中执行：建议有条件推进交割。公司披露事实：投委批准金额为 CNY 50 million [E1]；牌照续期被列为交割前置条件 [E2]。分析师推断：批准额度不代表前置条件已经满足。核验动作：核验签署文件、资金路径和牌照原件。投委门槛：全部交割条件满足且证据归档后方可放款。无法判断：当前无法判断牌照续期结果与实际交割日。"
+    "answer": "投中执行：建议有条件推进交割。公司披露事实：投委批准金额为 CNY 50 million [E1]，牌照续期被列为交割前置条件 [E2]。分析师推断：批准额度不代表前置条件已经满足。核验动作：核验签署文件、资金路径和牌照原件。投委门槛：全部交割条件满足且证据归档后方可放款。无法判断：当前无法判断牌照续期结果与实际交割日。"
+  },
+  {
+    "id": "during_waiver_governance",
+    "stage": "in_progress",
+    "scenario": "closing_waiver",
+    "expect_pass": true,
+    "evidence": "[E1] The IC approved the transaction subject to a cybersecurity remediation. [E2] Counsel proposed waiving the remediation condition for 30 days.",
+    "answer": "投中执行：仅建议在条件化豁免获批后推进交割。公司披露事实：网络安全整改是投委批准条件 [E1]，法律顾问提出 30 天豁免 [E2]。分析师推断：顾问建议不等同于有权机构批准，且豁免会形成交割后风险。核验动作：记录豁免理由、授权人、截止日和补救计划。投委门槛：投委书面批准豁免并设置逾期处置后方可交割。无法判断：当前无法判断整改是否能在豁免期完成。"
+  },
+  {
+    "id": "during_funding_path_reconciliation",
+    "stage": "in_progress",
+    "scenario": "funding_control",
+    "expect_pass": true,
+    "evidence": "[E1] The signed SPA specifies a USD 8 million purchase price. [E2] Treasury prepared two beneficiary accounts. [E3] Compliance verified one beneficiary account.",
+    "answer": "投中执行：资金支付应在条件满足后分段推进。公司披露事实：签署协议价格为 USD 8 million [E1]，财务准备了两个收款账户 [E2]，合规仅核验其中一个账户 [E3]。分析师推断：未核验账户构成资金路径风险。核验动作：对全部收款人、账户和协议主体执行独立回拨确认。投委门槛：双人复核全部账户且交割条件完成后方可付款。无法判断：当前无法判断第二账户的最终受益人。"
   },
   {
     "id": "post_kpi_escalation",
     "stage": "post_investment",
+    "scenario": "kpi_threshold",
     "expect_pass": true,
-    "evidence": "[E1] Board reporting defines monthly liquidity as a monitored KPI. [E2] The approved watch threshold is CNY 20 million.",
-    "answer": "投后监控：建议有条件维持增强监控。公司披露事实：月度流动性是董事会 KPI [E1]，关注阈值为 CNY 20 million [E2]。分析师推断：阈值仅是预警边界，不证明风险已经发生。核验动作：每月将管理报表与银行余额函证勾稽。投委门槛：触发阈值后形成风险事件并提交投委复核。无法判断：没有本期余额证据，无法判断是否已经触发预警。"
+    "evidence": "[E1] Board reporting defines monthly liquidity as a monitored KPI. [E2] The approved watch threshold is CNY 20 million. [E3] Current liquidity is CNY 17 million.",
+    "answer": "投后监控：建议在条件化处置下升级风险。公司披露事实：月度流动性是董事会 KPI [E1]，关注阈值为 CNY 20 million [E2]，本期值为 CNY 17 million [E3]。分析师推断：KPI 已越过关注阈值，但不等同于立即违约。核验动作：将管理报表与银行余额函证勾稽并更新现金预测。投委门槛：形成风险事件并审议资金保护方案。无法判断：当前无法判断未来现金缺口持续时间。"
+  },
+  {
+    "id": "post_verified_risk_resolution",
+    "stage": "post_investment",
+    "scenario": "risk_resolution",
+    "expect_pass": true,
+    "evidence": "[E1] Liquidity fell below the CNY 20 million KPI threshold in April. [E2] A bank statement confirms CNY 27 million at the end of May. [E3] The board approved a 13-week cash plan.",
+    "answer": "投后监控：可在条件满足后由高风险降为增强监控。公司披露事实：4 月流动性低于 CNY 20 million 的 KPI 阈值 [E1]，5 月银行对账单确认 CNY 27 million [E2]，董事会批准 13 周现金计划 [E3]。分析师推断：单期恢复不证明风险永久消除。核验动作：连续复核后续两个周期余额和现金计划偏差。投委门槛：连续达标后再解除预警。无法判断：当前无法判断改善是否可持续。"
+  },
+  {
+    "id": "post_covenant_breach",
+    "stage": "post_investment",
+    "scenario": "covenant_breach",
+    "expect_pass": true,
+    "evidence": "[E1] The loan agreement requires DSCR above 1.20. [E2] The quarterly calculation reports DSCR of 0.94. [E3] No lender waiver is on file.",
+    "answer": "投后监控：建议有条件升级投委与法务处置。公司披露事实：贷款协议 KPI 要求 DSCR 高于 1.20 [E1]，本季为 0.94 [E2]，尚无贷款人豁免 [E3]。分析师推断：已出现契约越界风险，但法律后果取决于正式通知和补救期。核验动作：复算 DSCR 并核对违约通知、补救期和交叉违约条款。投委门槛：法务确认影响并批准应对方案。无法判断：当前无法判断贷款人是否会加速到期。"
+  },
+  {
+    "id": "post_missing_period_data",
+    "stage": "post_investment",
+    "scenario": "missing_monitoring_data",
+    "expect_pass": true,
+    "evidence": "[E1] The board approved monthly ARR as a KPI. [E2] The latest available ARR report is for March.",
+    "answer": "投后监控：在条件满足前维持增强监控。公司披露事实：董事会将月度 ARR 设为 KPI [E1]，目前最新报告仍停留在 3 月 [E2]。分析师推断：缺报本身是监控有效性风险，不能把无数据解释为经营稳定。核验动作：补齐缺失周期并与开票和回款交叉验证。投委门槛：数据补齐后重新判断预警状态。无法判断：当前无法判断最新 ARR 水平。"
   },
   {
     "id": "reject_invented_buy_call",
     "stage": "post_investment",
+    "scenario": "hallucinated_return",
     "expect_pass": false,
+    "expected_critical_contains": ["no evidence citation", "unsupported numeric claims", "unconditional investment language"],
     "evidence": "[E1] Revenue was CNY 80 million in 2025.",
     "answer": "投后监控：公司利润率达到 35%，未来三年必然上涨，强烈买入。"
+  },
+  {
+    "id": "reject_unknown_citation",
+    "stage": "pre_investment",
+    "scenario": "citation_integrity",
+    "expect_pass": false,
+    "expected_critical_contains": ["unknown evidence citations"],
+    "evidence": "[E1] Audited revenue was CNY 70 million.",
+    "answer": "投前结论：在条件满足后推进。公司披露事实：审计收入为 CNY 70 million [E9]。分析师推断：收入仍需验证。核验动作：核对审计底稿。投委门槛：核验后再决策。无法判断：无法判断增长质量。"
+  },
+  {
+    "id": "reject_unsupported_valuation",
+    "stage": "pre_investment",
+    "scenario": "numeric_grounding",
+    "expect_pass": false,
+    "expected_critical_contains": ["unsupported numeric claims"],
+    "evidence": "[E1] Audited revenue was CNY 100 million.",
+    "answer": "投前结论：在条件满足后推进。公司披露事实：收入为 CNY 100 million [E1]。分析师推断：合理估值为 CNY 900 million。核验动作：补充可比公司。投委门槛：估值复核。无法判断：无法判断退出。"
+  },
+  {
+    "id": "reject_ignored_conflict",
+    "stage": "pre_investment",
+    "scenario": "evidence_conflict",
+    "expect_pass": false,
+    "expected_critical_contains": ["material evidence conflict not disclosed"],
+    "evidence": "[CONFLICT] [E1] Audited revenue was CNY 50 million. [E2] Management reports CNY 75 million.",
+    "answer": "投前结论：在条件满足后推进尽调。公司披露事实：收入分别为 CNY 50 million [E1] 和 CNY 75 million [E2]。分析师推断：公司增长良好。核验动作：查看明细。投委门槛：完成核验。无法判断：无法判断估值。"
+  },
+  {
+    "id": "reject_stale_evidence_as_current",
+    "stage": "pre_investment",
+    "scenario": "evidence_recency",
+    "expect_pass": false,
+    "expected_critical_contains": ["stale evidence not disclosed"],
+    "evidence": "[STALE] [E1] A 2021 report estimated market size at CNY 2 billion.",
+    "answer": "投前结论：在条件满足后推进尽调。公司披露事实：市场规模为 CNY 2 billion [E1]。分析师推断：市场空间充足。核验动作：核对行业报告。投委门槛：完成核验。无法判断：无法判断份额。"
+  },
+  {
+    "id": "reject_forecast_without_assumptions",
+    "stage": "pre_investment",
+    "scenario": "forecast_governance",
+    "expect_pass": false,
+    "expected_critical_contains": ["forecast presented without assumptions"],
+    "evidence": "[E1] Current revenue is CNY 40 million.",
+    "answer": "投前结论：在条件满足后推进。公司披露事实：当前收入 CNY 40 million [E1]。分析师推断：预计未来三年高速增长。核验动作：核对预算。投委门槛：预算确认。无法判断：无法判断退出。"
+  },
+  {
+    "id": "reject_during_without_closing_control",
+    "stage": "in_progress",
+    "scenario": "closing_conditions",
+    "expect_pass": false,
+    "expected_critical_contains": ["during-investment opinion lacks closing controls"],
+    "evidence": "[E1] The IC approved the investment.",
+    "answer": "投中执行：在条件满足后继续。公司披露事实：投委已经批准 [E1]。分析师推断：可以开展后续工作。核验动作：查看文件。投委门槛：管理层确认。无法判断：无法判断时间。"
+  },
+  {
+    "id": "reject_post_without_kpi_control",
+    "stage": "post_investment",
+    "scenario": "kpi_threshold",
+    "expect_pass": false,
+    "expected_critical_contains": ["post-investment opinion lacks KPI or alert controls"],
+    "evidence": "[E1] Management says operations are stable.",
+    "answer": "投后监控：在条件满足后继续观察。公司披露事实：管理层称经营稳定 [E1]。分析师推断：暂时没有问题。核验动作：下月询问管理层。投委门槛：管理层确认。无法判断：无法判断未来表现。"
+  },
+  {
+    "id": "reject_uncited_material_fact",
+    "stage": "post_investment",
+    "scenario": "citation_integrity",
+    "expect_pass": false,
+    "expected_critical_contains": ["no evidence citation"],
+    "evidence": "[E1] Cash balance is CNY 12 million.",
+    "answer": "投后监控：在条件满足后增强监控。公司披露事实：现金余额为 CNY 12 million。分析师推断：接近 KPI 预警。核验动作：核对银行流水。投委门槛：触发阈值后升级。无法判断：无法判断现金消耗速度。"
+  },
+  {
+    "id": "reject_unverified_risk_deescalation",
+    "stage": "post_investment",
+    "scenario": "risk_resolution",
+    "expect_pass": false,
+    "expected_critical_contains": ["risk de-escalated without verified resolution evidence"],
+    "evidence": "[RESOLUTION_UNVERIFIED] [E1] Management states that liquidity has improved, but no bank statement is available. [E2] The KPI threshold is CNY 20 million.",
+    "answer": "投后监控：在条件满足后解除预警。公司披露事实：管理层称流动性改善 [E1]，KPI 阈值为 CNY 20 million [E2]。分析师推断：风险已消除。核验动作：后续查看银行流水。投委门槛：管理层确认。无法判断：无法判断持续性。"
   }
 ]
