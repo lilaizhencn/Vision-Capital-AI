@@ -219,6 +219,125 @@ export interface ProjectTaskInput {
   evidence_file_ids?: string[];
 }
 
+export interface ClosingCondition {
+  id: string;
+  label: string;
+  status: "pending" | "satisfied" | "waived" | "failed";
+  owner: string;
+  due_date?: string | null;
+  evidence_file_id?: string | null;
+  waiver_reason: string;
+}
+
+export interface TransactionExecution {
+  id: string;
+  project_id: string;
+  transaction_type: string;
+  currency: string;
+  committed_amount?: string | null;
+  entry_valuation?: string | null;
+  ownership_pct?: string | null;
+  status: "drafting" | "ic_review" | "signing" | "closing" | "closed" | "aborted";
+  approval_status: "pending" | "conditional" | "approved" | "rejected";
+  decision_rationale: string;
+  conditions_precedent: ClosingCondition[];
+  evidence_file_ids: string[];
+  approved_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MonitoringMetricDefinition {
+  id: string;
+  project_id: string;
+  code: string;
+  name: string;
+  unit: string;
+  frequency: string;
+  direction: "higher_better" | "lower_better";
+  baseline_value?: string | null;
+  target_value?: string | null;
+  watch_threshold?: string | null;
+  breach_threshold?: string | null;
+  owner: string;
+  source_description: string;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MonitoringObservation {
+  id: string;
+  project_id: string;
+  metric_id: string;
+  period_end: string;
+  value: string;
+  status: "normal" | "watch" | "high";
+  variance_from_target?: string | null;
+  source_file_id?: string | null;
+  note: string;
+  created_at: string;
+}
+
+export interface LifecycleRisk {
+  id: string;
+  project_id: string;
+  observation_id?: string | null;
+  category: string;
+  title: string;
+  severity: "watch" | "high" | "critical";
+  status: "open" | "monitoring" | "resolved";
+  description: string;
+  trigger_source: string;
+  evidence_file_ids: string[];
+  detected_at: string;
+  resolved_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InvestmentOpinionVersion {
+  id: string;
+  project_id: string;
+  version: number;
+  stage: string;
+  recommendation: string;
+  confidence: "low" | "medium" | "high";
+  quality_score: string;
+  thesis: string;
+  change_summary: string;
+  evidence_hash: string;
+  evidence_file_ids: string[];
+  source_count: number;
+  created_at: string;
+}
+
+export interface DataSourceSubscription {
+  id: string;
+  project_id: string;
+  name: string;
+  source_type: string;
+  category: string;
+  url: string;
+  cadence_hours: number;
+  active: boolean;
+  status: string;
+  last_run_at?: string | null;
+  next_run_at?: string | null;
+  last_error?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LifecycleSummary {
+  transaction?: TransactionExecution | null;
+  metrics: MonitoringMetricDefinition[];
+  observations: MonitoringObservation[];
+  risks: LifecycleRisk[];
+  opinions: InvestmentOpinionVersion[];
+  data_sources: DataSourceSubscription[];
+}
+
 export interface DashboardSummary {
   total_projects: number;
   pre_investment_projects: number;

@@ -44,3 +44,21 @@
 ## Dashboard
 
 - `GET /api/dashboard/summary`
+
+## Investment lifecycle
+
+- `GET /api/projects/{project_id}/lifecycle`
+- `PUT /api/projects/{project_id}/lifecycle/transaction`
+- `POST /api/projects/{project_id}/lifecycle/metrics`
+- `POST /api/projects/{project_id}/lifecycle/metrics/{metric_id}/observations`
+- `POST /api/projects/{project_id}/lifecycle/risks`
+- `PATCH /api/projects/{project_id}/lifecycle/risks/{risk_id}`
+- `GET /api/projects/{project_id}/lifecycle/opinions`
+- `POST /api/projects/{project_id}/lifecycle/opinions/refresh`
+- `POST /api/projects/{project_id}/lifecycle/data-sources`
+- `PATCH /api/projects/{project_id}/lifecycle/data-sources/{source_id}`
+- `POST /api/projects/{project_id}/lifecycle/data-sources/{source_id}/run`
+
+Closing a transaction requires an approved IC decision, every closing condition in `satisfied` or `waived` state,
+and at least one project-owned evidence file. KPI observations are unique per metric and period. Threshold breaches
+create risk events and append a new investment-opinion version when the evidence hash changes.

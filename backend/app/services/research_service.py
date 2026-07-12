@@ -360,13 +360,20 @@ class ResearchService:
         except Exception:
             return []
 
-    def _download_and_store(self, project: Project, owner_id: str, source: ResearchSource) -> ProjectFile:
-        self._validate_public_url(source.url)
+    def _download_and_store(
+        self,
+        project: Project,
+        owner_id: str,
+        source: ResearchSource,
+        allow_configured_source: bool = False,
+    ) -> ProjectFile:
+        validator = self._validate_configured_public_url if allow_configured_source else self._validate_public_url
+        validator(source.url)
         headers = {"User-Agent": settings.research_user_agent, "Accept": "application/pdf,text/html,text/plain;q=0.9,*/*;q=0.1"}
         with httpx.Client(timeout=settings.research_request_timeout_seconds, follow_redirects=True, headers=headers) as client:
             response = client.get(source.url)
             response.raise_for_status()
-            self._validate_public_url(str(response.url))
+            validator(str(response.url))
             content = response.content
         if not content or len(content) > settings.research_download_max_bytes:
             raise ValueError("Research document is empty or exceeds the download limit")
@@ -500,13 +507,20 @@ class ResearchService:
 
     @classmethod
     def _validate_public_url(cls, url: str) -> None:
+        cls._validate_configured_public_url(url)
         parsed = urlparse(url)
-        if parsed.scheme != "https" or not parsed.hostname or not cls._is_trusted_domain(parsed.hostname.lower()):
+        if not parsed.hostname or not cls._is_trusted_domain(parsed.hostname.lower()):
             raise ValueError("Research URL is not on the trusted HTTPS allowlist")
+
+    @staticmethod
+    def _validate_configured_public_url(url: str) -> None:
+        parsed = urlparse(url)
+        if parsed.scheme != "https" or not parsed.hostname:
+            raise ValueError("Configured source must use a valid HTTPS URL")
         for result in socket.getaddrinfo(parsed.hostname, 443, type=socket.SOCK_STREAM):
             address = ipaddress.ip_address(result[4][0])
             if not address.is_global:
-                raise ValueError("Research URL resolves to a non-public address")
+                raise ValueError("Configured source resolves to a non-public address")
 
     @staticmethod
     def _safe_filename(title: str, suffix: str) -> str:

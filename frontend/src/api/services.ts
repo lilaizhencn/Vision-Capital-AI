@@ -1,5 +1,5 @@
 import client from "./client";
-import type { ChatResponse, DashboardSummary, FileBatch, MonitoringUpdate, Project, ProjectFile, ProjectTask, ProjectTaskInput, Report, RequirementDetail, ResearchWorkspace, User } from "../types";
+import type { ChatResponse, DashboardSummary, DataSourceSubscription, FileBatch, InvestmentOpinionVersion, LifecycleRisk, LifecycleSummary, MonitoringMetricDefinition, MonitoringObservation, MonitoringUpdate, Project, ProjectFile, ProjectTask, ProjectTaskInput, Report, RequirementDetail, ResearchWorkspace, TransactionExecution, User } from "../types";
 
 export async function register(payload: { email: string; username: string; password: string }) {
   const { data } = await client.post("/api/auth/register", payload);
@@ -192,5 +192,55 @@ export async function updateResearchSettings(projectId: string, autoEnabled: boo
   const { data } = await client.patch<ResearchWorkspace>(`/api/projects/${projectId}/research/settings`, {
     auto_enabled: autoEnabled,
   });
+  return data;
+}
+
+export async function getLifecycleSummary(projectId: string) {
+  const { data } = await client.get<LifecycleSummary>(`/api/projects/${projectId}/lifecycle`);
+  return data;
+}
+
+export async function saveTransactionExecution(projectId: string, payload: Record<string, unknown>) {
+  const { data } = await client.put<TransactionExecution>(`/api/projects/${projectId}/lifecycle/transaction`, payload);
+  return data;
+}
+
+export async function createLifecycleMetric(projectId: string, payload: Record<string, unknown>) {
+  const { data } = await client.post<MonitoringMetricDefinition>(`/api/projects/${projectId}/lifecycle/metrics`, payload);
+  return data;
+}
+
+export async function createMetricObservation(projectId: string, metricId: string, payload: Record<string, unknown>) {
+  const { data } = await client.post<MonitoringObservation>(`/api/projects/${projectId}/lifecycle/metrics/${metricId}/observations`, payload);
+  return data;
+}
+
+export async function createLifecycleRisk(projectId: string, payload: Record<string, unknown>) {
+  const { data } = await client.post<LifecycleRisk>(`/api/projects/${projectId}/lifecycle/risks`, payload);
+  return data;
+}
+
+export async function updateLifecycleRisk(projectId: string, riskId: string, payload: Record<string, unknown>) {
+  const { data } = await client.patch<LifecycleRisk>(`/api/projects/${projectId}/lifecycle/risks/${riskId}`, payload);
+  return data;
+}
+
+export async function refreshInvestmentOpinion(projectId: string) {
+  const { data } = await client.post<InvestmentOpinionVersion>(`/api/projects/${projectId}/lifecycle/opinions/refresh`);
+  return data;
+}
+
+export async function createDataSourceSubscription(projectId: string, payload: Record<string, unknown>) {
+  const { data } = await client.post<DataSourceSubscription>(`/api/projects/${projectId}/lifecycle/data-sources`, payload);
+  return data;
+}
+
+export async function updateDataSourceSubscription(projectId: string, sourceId: string, payload: Record<string, unknown>) {
+  const { data } = await client.patch<DataSourceSubscription>(`/api/projects/${projectId}/lifecycle/data-sources/${sourceId}`, payload);
+  return data;
+}
+
+export async function runDataSourceSubscription(projectId: string, sourceId: string) {
+  const { data } = await client.post<{ status: string; task_id?: string }>(`/api/projects/${projectId}/lifecycle/data-sources/${sourceId}/run`);
   return data;
 }

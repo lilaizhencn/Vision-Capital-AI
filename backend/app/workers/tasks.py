@@ -20,6 +20,7 @@ from app.core.database import SessionLocal
 from app.models.chunk import DocumentChunk
 from app.models.file import BatchStatus, DocumentBatch, ParseDeadLetter, ParseStage, ParseStageRun, ParseStatus, ProjectFile
 from app.models.project import Project
+from app.models.lifecycle import DataSourceSubscription
 from app.repositories.chunk_repository import ChunkRepository
 from app.repositories.file_repository import FileRepository
 from app.rag.chunking import chunk_text, estimate_tokens
@@ -134,6 +135,65 @@ def schedule_due_project_research_task() -> dict[str, int]:
                 project.research_status = "failed"
                 project.research_last_error = f"Unable to queue scheduled research: {exc}"[:2000]
                 project.next_research_at = now + timedelta(hours=settings.research_failure_retry_hours)
+                db.commit()
+        return {"queued": queued}
+    finally:
+        db.close()
+
+
+@celery_app.task(name="ingest_data_source_subscription_task")
+def ingest_data_source_subscription_task(subscription_id: str, owner_id: str):
+    """Fetch one explicitly configured public source through the hardened research pipeline."""
+    db = SessionLocal()
+    try:
+        from app.services.lifecycle_service import LifecycleService
+        file = LifecycleService(db).run_data_source(subscription_id, owner_id)
+        return {"status": "queued_for_parse", "file_id": file.id}
+    finally:
+        db.close()
+
+
+@celery_app.task(name="schedule_due_data_sources_task")
+def schedule_due_data_sources_task() -> dict[str, int]:
+    """Queue active source subscriptions due for collection in bounded batches."""
+    db = SessionLocal()
+    queued = 0
+    try:
+        now = datetime.now(timezone.utc)
+        subscriptions = list(db.scalars(
+            select(DataSourceSubscription)
+            .where(
+                DataSourceSubscription.active.is_(True),
+                DataSourceSubscription.next_run_at.is_not(None),
+                DataSourceSubscription.next_run_at <= now,
+                DataSourceSubscription.status.in_(("scheduled", "ingested", "failed")),
+            )
+            .order_by(DataSourceSubscription.next_run_at)
+            .limit(settings.research_scheduler_batch_size)
+        ))
+        project_owner_ids = {
+            project_id: owner_id
+            for project_id, owner_id in db.execute(
+                select(Project.id, Project.owner_id).where(
+                    Project.id.in_([item.project_id for item in subscriptions])
+                )
+            ).all()
+        } if subscriptions else {}
+        for subscription in subscriptions:
+            subscription.status = "queued"
+            subscription.last_error = None
+        db.commit()
+        for subscription in subscriptions:
+            owner_id = project_owner_ids.get(subscription.project_id)
+            if not owner_id:
+                continue
+            try:
+                ingest_data_source_subscription_task.delay(subscription.id, owner_id)
+                queued += 1
+            except Exception as exc:
+                subscription.status = "failed"
+                subscription.last_error = f"Unable to queue source collection: {exc}"[:2000]
+                subscription.next_run_at = now + timedelta(hours=subscription.cadence_hours)
                 db.commit()
         return {"queued": queued}
     finally:
@@ -323,6 +383,14 @@ def persist_document_task(self, file_id: str):
         db.commit()
         from app.services.research_service import ResearchService
         ResearchService(db).refresh_requirements(file.project_id)
+        try:
+            from app.services.lifecycle_service import LifecycleService
+            project = db.get(Project, file.project_id)
+            if project:
+                LifecycleService(db).refresh_opinion(file.project_id, project.owner_id)
+        except Exception:
+            # Opinion versioning must never roll back a successfully parsed document.
+            db.rollback()
         _refresh_batch(db, file.batch_id)
         return file_id
     except Exception as exc:

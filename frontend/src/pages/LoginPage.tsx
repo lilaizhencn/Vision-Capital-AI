@@ -32,7 +32,7 @@ export function LoginPage() {
           <Form layout="vertical" onFinish={onFinish} requiredMark={false} size="large">
             <Form.Item label="工作邮箱" name="email" rules={[{ required: true, type: "email", message: "请输入有效的工作邮箱" }]}><Input prefix={<MailOutlined />} placeholder="name@firm.com" /></Form.Item>
             <Form.Item label="登录密码" name="password" rules={[{ required: true, message: "请输入密码" }]}><Input.Password prefix={<LockOutlined />} placeholder="输入你的密码" /></Form.Item>
-            <Button type="primary" htmlType="submit" block icon={<ArrowRightOutlined />} iconPosition="end">进入工作台</Button>
+            <Button type="primary" htmlType="submit" block icon={<ArrowRightOutlined />} iconPlacement="end">进入工作台</Button>
           </Form>
           <div className="auth-switch"><span>还没有工作空间？</span><Button type="link" onClick={() => navigate("/register")}>申请体验</Button></div>
         </Card>

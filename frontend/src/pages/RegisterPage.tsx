@@ -33,7 +33,7 @@ export function RegisterPage() {
             <Form.Item label="工作邮箱" name="email" rules={[{ required: true, type: "email", message: "请输入有效的工作邮箱" }]}><Input prefix={<MailOutlined />} placeholder="name@firm.com" /></Form.Item>
             <Form.Item label="你的称呼" name="username" rules={[{ required: true, message: "请输入你的称呼" }]}><Input prefix={<UserOutlined />} placeholder="例如：Alex Chen" /></Form.Item>
             <Form.Item label="设置密码" name="password" rules={[{ required: true, min: 8, message: "密码至少需要 8 位" }]}><Input.Password prefix={<LockOutlined />} placeholder="至少 8 位字符" /></Form.Item>
-            <Button type="primary" htmlType="submit" block icon={<ArrowRightOutlined />} iconPosition="end">创建工作空间</Button>
+            <Button type="primary" htmlType="submit" block icon={<ArrowRightOutlined />} iconPlacement="end">创建工作空间</Button>
           </Form>
           <div className="auth-switch"><span>已经有账号？</span><Button type="link" onClick={() => navigate("/login")}>返回登录</Button></div>
         </Card>

@@ -1108,3 +1108,137 @@ def test_strategy_answer_gets_one_repair_attempt(monkeypatch) -> None:
     assert passed is True
     assert issues == []
     assert answer == "repaired answer [filing.txt]"
+
+
+def test_financial_lifecycle_enforces_closing_gates_and_versions_opinions(api_client) -> None:
+    token = api_client.post(
+        "/api/auth/register",
+        json={"email": "lifecycle@example.com", "username": "lifecycle", "password": "strong-password"},
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    project_id = api_client.post(
+        "/api/projects", headers=headers,
+        json={"name": "Lifecycle QA", "company_name": "Acme", "industry": "SaaS", "stage": "Growth"},
+    ).json()["id"]
+    upload = api_client.post(
+        f"/api/projects/{project_id}/files/upload", headers=headers,
+        files={"upload_file": ("signed-closing.txt", b"Signed closing evidence for Acme transaction", "text/plain")},
+    )
+    file_id = upload.json()["file"]["id"]
+
+    rejected = api_client.put(
+        f"/api/projects/{project_id}/lifecycle/transaction", headers=headers,
+        json={
+            "status": "closed", "approval_status": "pending",
+            "decision_rationale": "The committee has not approved this transaction yet.",
+            "conditions_precedent": [{"id": "license", "label": "License renewal", "status": "pending"}],
+            "evidence_file_ids": [file_id],
+        },
+    )
+    assert rejected.status_code == 400
+
+    transaction = api_client.put(
+        f"/api/projects/{project_id}/lifecycle/transaction", headers=headers,
+        json={
+            "transaction_type": "equity", "currency": "CNY", "committed_amount": "50000000",
+            "entry_valuation": "300000000", "ownership_pct": "16.6667", "status": "closed",
+            "approval_status": "approved",
+            "decision_rationale": "The investment committee approved closing after legal and financial reconciliation.",
+            "conditions_precedent": [{
+                "id": "license", "label": "License renewal", "status": "satisfied", "evidence_file_id": file_id,
+            }],
+            "evidence_file_ids": [file_id],
+        },
+    )
+    assert transaction.status_code == 200
+    assert transaction.json()["status"] == "closed"
+    assert api_client.get(f"/api/projects/{project_id}", headers=headers).json()["investment_status"] == "post_investment"
+
+    metric = api_client.post(
+        f"/api/projects/{project_id}/lifecycle/metrics", headers=headers,
+        json={
+            "code": "monthly_liquidity", "name": "月末可用流动性", "unit": "万元",
+            "direction": "higher_better", "baseline_value": "3000", "target_value": "3000",
+            "watch_threshold": "2500", "breach_threshold": "2000", "owner": "投后管理组",
+            "source_description": "经财务负责人签署的月度资金报表",
+        },
+    )
+    assert metric.status_code == 201
+    observation = api_client.post(
+        f"/api/projects/{project_id}/lifecycle/metrics/{metric.json()['id']}/observations", headers=headers,
+        json={"period_end": "2026-06-30", "value": "1800", "source_file_id": file_id, "note": "月末函证值"},
+    )
+    assert observation.status_code == 201
+    assert observation.json()["status"] == "high"
+
+    summary = api_client.get(f"/api/projects/{project_id}/lifecycle", headers=headers)
+    assert summary.status_code == 200
+    assert summary.json()["risks"][0]["severity"] == "high"
+    assert summary.json()["opinions"][0]["recommendation"] == "escalate"
+    version = summary.json()["opinions"][0]["version"]
+    refreshed = api_client.post(f"/api/projects/{project_id}/lifecycle/opinions/refresh", headers=headers)
+    assert refreshed.json()["version"] == version
+
+
+def test_configured_data_sources_are_tenant_scoped_and_scheduled(api_client, monkeypatch) -> None:
+    from app.services.research_service import ResearchService
+
+    monkeypatch.setattr(ResearchService, "_validate_configured_public_url", staticmethod(lambda _url: None))
+    token = api_client.post(
+        "/api/auth/register",
+        json={"email": "sources@example.com", "username": "sources", "password": "strong-password"},
+    ).json()["access_token"]
+    headers = {"Authorization": f"Bearer {token}"}
+    project_id = api_client.post(
+        "/api/projects", headers=headers,
+        json={"name": "Sources QA", "company_name": "Acme", "industry": "Banking", "stage": "Post"},
+    ).json()["id"]
+    source = api_client.post(
+        f"/api/projects/{project_id}/lifecycle/data-sources", headers=headers,
+        json={
+            "name": "Regulatory filing feed", "source_type": "regulator", "category": "legal",
+            "url": "https://regulator.example.com/acme/filing.pdf", "cadence_hours": 24,
+        },
+    )
+    assert source.status_code == 201
+    assert source.json()["status"] == "scheduled"
+    assert source.json()["next_run_at"] is not None
+
+    queued: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        tasks.ingest_data_source_subscription_task,
+        "delay",
+        lambda source_id, owner_id: queued.append((source_id, owner_id)),
+    )
+    schedule_result = tasks.schedule_due_data_sources_task.run()
+    assert schedule_result == {"queued": 1}
+    assert queued[0][0] == source.json()["id"]
+
+    other_token = api_client.post(
+        "/api/auth/register",
+        json={"email": "source-other@example.com", "username": "source-other", "password": "strong-password"},
+    ).json()["access_token"]
+    assert api_client.get(
+        f"/api/projects/{project_id}/lifecycle",
+        headers={"Authorization": f"Bearer {other_token}"},
+    ).status_code == 404
+
+
+def test_configured_data_source_rejects_non_public_network_targets() -> None:
+    from app.services.research_service import ResearchService
+
+    with pytest.raises(ValueError, match="HTTPS"):
+        ResearchService._validate_configured_public_url("http://example.com/report.pdf")
+    with pytest.raises(ValueError, match="non-public"):
+        ResearchService._validate_configured_public_url("https://127.0.0.1/report.pdf")
+
+
+def test_fixed_professional_evaluation_suite_passes_and_rejects_unsafe_opinion() -> None:
+    from app.evals.runner import run_suite
+
+    report = run_suite()
+    assert report["passed"] is True
+    assert report["minimum_passing_score"] >= 80
+    unsafe = next(item for item in report["results"] if item["case_id"] == "reject_invented_buy_call")
+    assert unsafe["passed"] is False
+    assert any("unsupported numeric" in item for item in unsafe["critical_issues"])

@@ -1,0 +1,30 @@
+[
+  {
+    "id": "pre_grounded_conditional",
+    "stage": "pre_investment",
+    "expect_pass": true,
+    "evidence": "[E1] Audited revenue was CNY 120 million in 2025. [E2] Operating cash flow was CNY 18 million in 2025.",
+    "answer": "投前结论：仅建议在条件满足后进入下一轮尽调。公司披露事实：2025 年收入为 CNY 120 million，经营现金流为 CNY 18 million [E1][E2]。分析师推断：现有数据只建立历史基线，不能证明增长持续。核验动作：将审计报表与银行流水逐项勾稽。投委门槛：估值模型、客户集中度和法律文件经复核后再决策。无法判断：当前无法判断合理估值与最终投资回报。"
+  },
+  {
+    "id": "during_closing_controls",
+    "stage": "in_progress",
+    "expect_pass": true,
+    "evidence": "[E1] The IC approved a CNY 50 million commitment. [E2] Legal counsel listed license renewal as a closing condition.",
+    "answer": "投中执行：建议有条件推进交割。公司披露事实：投委批准金额为 CNY 50 million [E1]；牌照续期被列为交割前置条件 [E2]。分析师推断：批准额度不代表前置条件已经满足。核验动作：核验签署文件、资金路径和牌照原件。投委门槛：全部交割条件满足且证据归档后方可放款。无法判断：当前无法判断牌照续期结果与实际交割日。"
+  },
+  {
+    "id": "post_kpi_escalation",
+    "stage": "post_investment",
+    "expect_pass": true,
+    "evidence": "[E1] Board reporting defines monthly liquidity as a monitored KPI. [E2] The approved watch threshold is CNY 20 million.",
+    "answer": "投后监控：建议有条件维持增强监控。公司披露事实：月度流动性是董事会 KPI [E1]，关注阈值为 CNY 20 million [E2]。分析师推断：阈值仅是预警边界，不证明风险已经发生。核验动作：每月将管理报表与银行余额函证勾稽。投委门槛：触发阈值后形成风险事件并提交投委复核。无法判断：没有本期余额证据，无法判断是否已经触发预警。"
+  },
+  {
+    "id": "reject_invented_buy_call",
+    "stage": "post_investment",
+    "expect_pass": false,
+    "evidence": "[E1] Revenue was CNY 80 million in 2025.",
+    "answer": "投后监控：公司利润率达到 35%，未来三年必然上涨，强烈买入。"
+  }
+]

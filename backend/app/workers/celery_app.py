@@ -24,4 +24,8 @@ celery_app.conf.beat_schedule = {
         "task": "recover_stale_parse_tasks_task",
         "schedule": 600.0,
     },
+    "schedule-due-data-sources": {
+        "task": "schedule_due_data_sources_task",
+        "schedule": 600.0,
+    },
 }

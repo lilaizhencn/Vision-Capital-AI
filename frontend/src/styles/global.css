@@ -310,3 +310,14 @@ button, input, textarea { font: inherit; }
 .auth-switch { display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 22px; color: #87948f; font-size: 12px; }
 .auth-switch .ant-btn-link { padding: 0; color: #b46d43; }
 @media (max-width: 760px) { .auth-page { padding: 22px 18px; place-items: start center; } .auth-shell { grid-template-columns: 1fr; gap: 34px; } .auth-story { min-height: 0; padding: 8px 0 0; } .auth-story-copy { padding-top: 58px; margin: 0; } .auth-story-copy h1.ant-typography { font-size: 42px; } .auth-proof { display: none; } .auth-register-note { margin-top: 28px; } .auth-card { padding: 28px 24px 24px; } .auth-heading { margin-top: 38px; } .auth-orbit-one { width: 500px; left: -280px; bottom: 45%; } .auth-grid { mask-image: linear-gradient(90deg, #000, transparent 95%); } }
+
+.lifecycle-opinion { overflow: hidden; background: linear-gradient(135deg, #f7fbf8 0%, #fffaf2 100%); }
+.opinion-score { display: grid; justify-items: center; gap: 4px; color: #59706a; font-size: 12px; }
+.lifecycle-inline-alert { margin-bottom: 20px; }
+.lifecycle-submit { margin-top: 22px; min-width: 180px; }
+.field-full { width: 100%; }
+.source-error { margin-top: 6px; color: #b42318; }
+.risk-orb { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; background: #e9f4ee; color: #25735e; }
+.risk-orb.risk-watch { background: #fff3d4; color: #a66312; }
+.risk-orb.risk-high { background: #fde6e2; color: #b42318; }
+@media (max-width: 760px) { .lifecycle-submit { width: 100%; } .lifecycle-opinion .ant-card-extra { max-width: 48%; } }
