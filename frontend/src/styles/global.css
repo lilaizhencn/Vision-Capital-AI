@@ -307,6 +307,7 @@ button, input, textarea { font: inherit; }
 .auth-card .ant-input-affix-wrapper-focused, .auth-card .ant-input-affix-wrapper:focus { border-color: #2b776b; box-shadow: 0 0 0 2px rgba(43,119,107,.1); }
 .auth-card .ant-btn-primary { height: 48px; border-radius: 1px; background: #103e37; box-shadow: none; font-weight: 600; }
 .auth-card .ant-btn-primary:hover { background: #1c5b50 !important; }
+.evaluation-account-note { display: block; margin-top: 12px; text-align: center; color: #74857f; font-size: 11px; }
 .auth-switch { display: flex; align-items: center; justify-content: center; gap: 4px; margin-top: 22px; color: #87948f; font-size: 12px; }
 .auth-switch .ant-btn-link { padding: 0; color: #b46d43; }
 @media (max-width: 760px) { .auth-page { padding: 22px 18px; place-items: start center; } .auth-shell { grid-template-columns: 1fr; gap: 34px; } .auth-story { min-height: 0; padding: 8px 0 0; } .auth-story-copy { padding-top: 58px; margin: 0; } .auth-story-copy h1.ant-typography { font-size: 42px; } .auth-proof { display: none; } .auth-register-note { margin-top: 28px; } .auth-card { padding: 28px 24px 24px; } .auth-heading { margin-top: 38px; } .auth-orbit-one { width: 500px; left: -280px; bottom: 45%; } .auth-grid { mask-image: linear-gradient(90deg, #000, transparent 95%); } }

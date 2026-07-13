@@ -4,6 +4,11 @@ import { useNavigate } from "react-router-dom";
 
 import { login } from "../api/services";
 
+const EVALUATION_ACCOUNT = {
+  email: "cross-industry-5443fce457@example.com",
+  password: "VisionQA#2026!",
+};
+
 export function LoginPage() {
   const navigate = useNavigate();
 
@@ -29,11 +34,12 @@ export function LoginPage() {
         <Card className="auth-card" variant="borderless">
           <button className="auth-return" type="button" onClick={() => navigate("/")}><ArrowLeftOutlined /> 返回官网</button>
           <div className="auth-heading"><p className="auth-kicker">WELCOME BACK</p><Typography.Title level={2}>回到你的研究现场</Typography.Title><Typography.Paragraph>登录后继续推进正在发生的投资判断。</Typography.Paragraph></div>
-          <Form layout="vertical" onFinish={onFinish} requiredMark={false} size="large">
+          <Form layout="vertical" initialValues={EVALUATION_ACCOUNT} onFinish={onFinish} requiredMark={false} size="large">
             <Form.Item label="工作邮箱" name="email" rules={[{ required: true, type: "email", message: "请输入有效的工作邮箱" }]}><Input prefix={<MailOutlined />} placeholder="name@firm.com" /></Form.Item>
             <Form.Item label="登录密码" name="password" rules={[{ required: true, message: "请输入密码" }]}><Input.Password prefix={<LockOutlined />} placeholder="输入你的密码" /></Form.Item>
             <Button type="primary" htmlType="submit" block icon={<ArrowRightOutlined />} iconPlacement="end">进入工作台</Button>
           </Form>
+          <Typography.Text className="evaluation-account-note">体验账号已预填，可直接进入工作台。</Typography.Text>
           <div className="auth-switch"><span>还没有工作空间？</span><Button type="link" onClick={() => navigate("/register")}>申请体验</Button></div>
         </Card>
       </div>

@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const client = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || "/",
+  baseURL: import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? "https://vision.tokdou.com" : "/"),
 });
 
 client.interceptors.request.use((config) => {
