@@ -8,12 +8,12 @@ import {
   SettingOutlined,
   UserOutlined,
 } from "@ant-design/icons";
-import { Button, Drawer, Input, Layout, Menu, Select, Space, Typography, message } from "antd";
+import { Button, Drawer, Input, Layout, Menu, Select, Space, Tag, Typography, message } from "antd";
 import { PropsWithChildren, useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 
-import { askProject, getProjects } from "../api/services";
-import type { Project } from "../types";
+import { askProject, getAIUsage, getProjects } from "../api/services";
+import type { AIUsage, Project } from "../types";
 
 const { Header, Sider, Content } = Layout;
 
@@ -89,6 +89,14 @@ export function AppLayout({ children }: PropsWithChildren) {
   const navigate = useNavigate();
   const location = useLocation();
   const [assistantOpen, setAssistantOpen] = useState(false);
+  const [aiUsage, setAIUsage] = useState<AIUsage>();
+
+  useEffect(() => {
+    const refreshUsage = () => { void getAIUsage().then(setAIUsage).catch(() => undefined); };
+    refreshUsage();
+    window.addEventListener("vision-ai-usage-changed", refreshUsage);
+    return () => window.removeEventListener("vision-ai-usage-changed", refreshUsage);
+  }, []);
 
   const searchProjects = async (value: string) => {
     const query = value.trim().toLowerCase();
@@ -133,12 +141,13 @@ export function AppLayout({ children }: PropsWithChildren) {
           <div className="breadcrumb-line"><span>投研工作台</span><span className="breadcrumb-slash">/</span><strong>{location.pathname === "/workspace" ? "今日概览" : menuItems.find((item) => item.key === `/${location.pathname.split("/")[1]}`)?.label ?? "项目空间"}</strong></div>
           <div className="header-actions">
             <Input.Search className="global-search" prefix={<SearchOutlined />} placeholder="搜索项目、公司、报告" enterButton={false} onSearch={(value) => void searchProjects(value)} />
+            {aiUsage ? <Tag className="ai-quota-chip" color={aiUsage.remaining === 0 ? "red" : aiUsage.remaining <= 3 ? "gold" : "green"}>AI 今日剩余 {aiUsage.remaining}/{aiUsage.limit}</Tag> : null}
             <Button type="text" icon={<UserOutlined />} className="user-button" onClick={logout}>退出登录</Button>
           </div>
         </Header>
         <Content className="app-content">{children}</Content>
       </Layout>
-      <Button className="floating-assistant" type="primary" icon={<ExperimentOutlined />} onClick={() => setAssistantOpen(true)}>AI 助手</Button>
+      <Button className="floating-assistant" type="primary" icon={<ExperimentOutlined />} disabled={aiUsage?.remaining === 0} title={aiUsage?.remaining === 0 ? "今日 AI 体验额度已用完" : undefined} onClick={() => setAssistantOpen(true)}>AI 助手</Button>
       <GlobalAssistant open={assistantOpen} onClose={() => setAssistantOpen(false)} />
     </Layout>
   );

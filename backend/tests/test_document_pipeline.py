@@ -312,6 +312,9 @@ def test_auth_project_upload_and_parse_flow(api_client) -> None:
     logged_in = api_client.post("/api/auth/login", json={"email": "qa@example.com", "password": "strong-password"})
     assert logged_in.status_code == 200
     assert api_client.get("/api/auth/me", headers=headers).json()["username"] == "qa"
+    initial_usage = api_client.get("/api/auth/ai-usage", headers=headers)
+    assert initial_usage.status_code == 200
+    assert initial_usage.json()["remaining"] == 10
 
     project = api_client.post("/api/projects", headers=headers, json={"name": "QA", "company_name": "Acme", "industry": "SaaS", "stage": "Seed"})
     assert project.status_code == 200
@@ -727,6 +730,34 @@ def test_persist_stage_tolerates_embedding_provider_errors(api_client, monkeypat
     file_item = api_client.get(f"/api/projects/{project_id}/files", headers=headers).json()[0]
     assert file_item["parse_status"] == "completed"
     assert file_item["progress"] == 100
+    usage_after_parse = api_client.get("/api/auth/ai-usage", headers=headers).json()
+    assert usage_after_parse["used"] == 1
+    assert usage_after_parse["remaining"] == 9
+
+
+def test_ai_usage_quota_is_shared_daily_and_idempotent() -> None:
+    from fastapi import HTTPException
+    from app.services.ai_usage_service import AIUsageService
+
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+    Base.metadata.create_all(engine)
+    TestSession = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
+    with TestSession() as db:
+        service = AIUsageService(db)
+        first = service.consume("quota-user", "document", "document:file-1")
+        repeated = service.consume("quota-user", "document", "document:file-1")
+        assert first["used"] == 1
+        assert repeated["used"] == 1
+        for index in range(2, 11):
+            service.consume("quota-user", "chat" if index % 2 else "report", f"operation:{index}")
+        exhausted = service.snapshot("quota-user")
+        assert exhausted["used"] == 10
+        assert exhausted["remaining"] == 0
+        assert exhausted["timezone"] == "Asia/Singapore"
+        with pytest.raises(HTTPException) as exc_info:
+            service.consume("quota-user", "chat", "operation:11")
+        assert exc_info.value.status_code == 429
+        assert exc_info.value.headers["X-AI-Remaining"] == "0"
 
 
 def test_stale_parse_stage_is_automatically_requeued(monkeypatch) -> None:

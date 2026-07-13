@@ -5,6 +5,11 @@
 - `POST /api/auth/register`
 - `POST /api/auth/login`
 - `GET /api/auth/me`
+- `GET /api/auth/ai-usage`：返回当前用户按新加坡自然日统计的 AI 限额、已用次数、剩余次数和重置时间。
+
+预览环境中，聊天问答、报告生成和每个文件的 AI 解析共享每日 10 次额度。同一文件的后台重试不重复计数；
+第 11 次同步调用返回 `429 Too Many Requests`，并携带 `Retry-After`、`X-AI-Limit`、
+`X-AI-Remaining` 和 `X-AI-Reset` 响应头。
 
 ## Projects
 

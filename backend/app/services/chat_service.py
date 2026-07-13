@@ -1,5 +1,6 @@
 import json
 import re
+import uuid
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -10,6 +11,7 @@ from app.repositories.file_repository import FileRepository
 from app.repositories.project_repository import ProjectRepository
 from app.schemas.chat import Citation, ChatResponse, EvidenceClaim
 from app.services.evidence_ledger_service import EvidenceLedgerService
+from app.services.ai_usage_service import AIUsageService
 from app.services.rag_service import RAGService
 from app.services.research_service import ResearchService
 
@@ -27,6 +29,7 @@ class ChatService:
         project = self.project_repo.get_for_owner(project_id, user_id)
         if not project:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Project not found")
+        AIUsageService(self.db).consume(user_id, "chat", f"chat:{user_id}:{uuid.uuid4()}")
 
         is_strategy_question = self._is_strategy_question(message)
         chunks = (

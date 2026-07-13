@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, EmailStr
 
@@ -28,3 +28,11 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     user: UserRead
 
+
+class AIUsageRead(BaseModel):
+    usage_date: date
+    limit: int
+    used: int
+    remaining: int
+    reset_at: datetime
+    timezone: str

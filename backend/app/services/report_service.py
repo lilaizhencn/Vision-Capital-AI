@@ -1,4 +1,5 @@
 from fastapi import HTTPException, status
+import uuid
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -7,6 +8,7 @@ from app.models.project import Project
 from app.repositories.file_repository import FileRepository
 from app.repositories.report_repository import ReportRepository
 from app.services.rag_service import RAGService
+from app.services.ai_usage_service import AIUsageService
 from app.services.research_service import ResearchService
 
 
@@ -26,6 +28,7 @@ class ReportService:
 
     def generate(self, project_id: str, owner_id: str):
         project = self._ensure_project(project_id, owner_id)
+        AIUsageService(self.db).consume(owner_id, "report", f"report:{owner_id}:{uuid.uuid4()}")
         chunks = self.rag_service.investment_strategy_search(
             project_id,
             "investment report business revenue customers gross margin cash flow competition management regulation valuation risks pre-investment during-investment post-investment strategy",

@@ -25,6 +25,7 @@ from app.repositories.chunk_repository import ChunkRepository
 from app.repositories.file_repository import FileRepository
 from app.rag.chunking import chunk_text, estimate_tokens
 from app.services.document_parser_service import DocumentParserService
+from app.services.ai_usage_service import AIUsageService
 from app.services.file_validation_service import validate_file_signature
 from app.services.virus_scan_service import VirusScanner
 from app.storage.storage_service import get_storage_service
@@ -286,6 +287,10 @@ def validate_uploaded_file_task(self, file_id: str):
             scan_result = VirusScanner().scan_file(path)
         file.virus_scan_status = "clean" if scan_result != "skipped" else "skipped"
         file.virus_scan_result = scan_result
+        project = db.get(Project, file.project_id)
+        if not project:
+            raise ValueError("Project not found for AI quota accounting")
+        AIUsageService(db).consume(project.owner_id, "document", f"document:{file.id}")
         _finish_stage(db, file, ParseStage.ocr, STAGE_PROGRESS[ParseStage.ocr])
         return file_id
     except Exception as exc:

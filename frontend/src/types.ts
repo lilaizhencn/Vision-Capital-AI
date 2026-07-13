@@ -12,6 +12,15 @@ export interface User {
   created_at: string;
 }
 
+export interface AIUsage {
+  usage_date: string;
+  limit: number;
+  used: number;
+  remaining: number;
+  reset_at: string;
+  timezone: string;
+}
+
 export interface Project {
   id: string;
   owner_id: string;

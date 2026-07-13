@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     chunk_overlap: int = 200
     embedding_dimension: int = 1536
     celery_task_always_eager: bool = False
+    ai_daily_quota_enabled: bool = True
+    ai_daily_quota_limit: int = 10
+    ai_daily_quota_timezone: str = "Asia/Singapore"
 
     model_config = SettingsConfigDict(
         env_file=".env",

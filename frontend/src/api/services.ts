@@ -1,5 +1,9 @@
 import client from "./client";
-import type { ChatResponse, DashboardSummary, DataSourceSubscription, FileBatch, InvestmentOpinionVersion, LifecycleRisk, LifecycleSummary, MonitoringMetricDefinition, MonitoringObservation, MonitoringUpdate, Project, ProjectFile, ProjectTask, ProjectTaskInput, Report, RequirementDetail, ResearchWorkspace, TransactionExecution, User } from "../types";
+import type { AIUsage, ChatResponse, DashboardSummary, DataSourceSubscription, FileBatch, InvestmentOpinionVersion, LifecycleRisk, LifecycleSummary, MonitoringMetricDefinition, MonitoringObservation, MonitoringUpdate, Project, ProjectFile, ProjectTask, ProjectTaskInput, Report, RequirementDetail, ResearchWorkspace, TransactionExecution, User } from "../types";
+
+function notifyAIUsageChanged() {
+  window.dispatchEvent(new Event("vision-ai-usage-changed"));
+}
 
 export async function register(payload: { email: string; username: string; password: string }) {
   const { data } = await client.post("/api/auth/register", payload);
@@ -13,6 +17,11 @@ export async function login(payload: { email: string; password: string }) {
 
 export async function getMe() {
   const { data } = await client.get<User>("/api/auth/me");
+  return data;
+}
+
+export async function getAIUsage() {
+  const { data } = await client.get<AIUsage>("/api/auth/ai-usage");
   return data;
 }
 
@@ -117,8 +126,12 @@ export async function retryFile(fileId: string) {
 }
 
 export async function askProject(projectId: string, message: string) {
-  const { data } = await client.post<ChatResponse>(`/api/projects/${projectId}/chat`, { message });
-  return data;
+  try {
+    const { data } = await client.post<ChatResponse>(`/api/projects/${projectId}/chat`, { message });
+    return data;
+  } finally {
+    notifyAIUsageChanged();
+  }
 }
 
 export async function getReports(projectId: string) {
@@ -127,8 +140,12 @@ export async function getReports(projectId: string) {
 }
 
 export async function generateReport(projectId: string) {
-  const { data } = await client.post<Report>(`/api/projects/${projectId}/reports/generate`);
-  return data;
+  try {
+    const { data } = await client.post<Report>(`/api/projects/${projectId}/reports/generate`);
+    return data;
+  } finally {
+    notifyAIUsageChanged();
+  }
 }
 
 export async function getRecentReports() {

@@ -15,3 +15,4 @@ from app.models.lifecycle import (
 )
 from app.models.task import ProjectTask
 from app.models.user import User
+from app.models.ai_usage import AIUsageEvent

@@ -52,6 +52,7 @@ button, input, textarea { font: inherit; }
 .breadcrumb-line strong { color: var(--ink); font-weight: 600; }
 .breadcrumb-slash { padding: 0 10px; color: #b2c1ba; }
 .header-actions { display: flex; align-items: center; gap: 16px; }
+.ai-quota-chip { flex: none; margin-inline-end: 0; padding-inline: 9px; font-size: 11px; }
 .global-search { width: 290px; }
 .global-search.ant-input-affix-wrapper, .global-search .ant-input { border: 0 !important; border-bottom: 1px solid var(--line) !important; border-radius: 0; background: transparent !important; }
 .global-search.ant-input-search .ant-input-group-addon { display: none; }
