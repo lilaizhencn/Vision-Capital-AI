@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     app_name: str = "Vision Capital AI"
     app_env: str = "local"
     app_secret_key: str = "change-me"
-    cors_allowed_origins: str = "https://vision.tokdou.com,http://localhost:8090,http://localhost:5173"
+    cors_allowed_origins: str = "https://capital.tokdou.com,https://vision.tokdou.com,http://localhost:8090,http://localhost:5173"
     cors_allowed_origin_regex: str = r"^https://(?:[a-z0-9-]+\.)?vcai\.[a-z0-9-]+\.workers\.dev$"
     auto_create_tables: bool = False
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/vision_capital_ai"
